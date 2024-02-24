@@ -47,3 +47,7 @@ alias e="exit"
 
 #---------------------editing(vim)-------------------
 alias v="vim"
+
+#-----------------------sys--------------------------
+alias sd="shutdown"
+alias rb="reboot"
