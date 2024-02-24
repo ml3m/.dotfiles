@@ -36,7 +36,7 @@ alias cdp="cd projects/"
 alias cdads="cd projects/ads/"
 alias cdconfig="cd .config/"
 alias cdc="cd Clearn/"
-alias cdgh="cd github_backup/"
+alias gh="cd github_backup/"
 alias c="cd .."
 
 #----------------files-------------------------------
@@ -44,3 +44,6 @@ alias a="ls -a"
 
 #---------------------terminal-----------------------
 alias e="exit"
+
+#---------------------editing(vim)-------------------
+alias v="vim"
