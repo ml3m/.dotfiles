@@ -49,5 +49,5 @@ alias e="exit"
 alias v="vim"
 
 #-----------------------sys--------------------------
-alias sd="shutdown"
+alias sd="shutdown now"
 alias rb="reboot"
