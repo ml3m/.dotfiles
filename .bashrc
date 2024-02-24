@@ -21,3 +21,9 @@ fi
 alias cpconf="rsync -av --progress ~/.config/ ~/github_backup/configs --exclude .git --exclude /Code\ -\ OSS --exclude dconf --exclude discord --exclude gtk-3.0 --exclude nvim "
 
 alias cpbashrc="cp ~/.bashrc ~/github_backup"
+
+alias gs="git status"
+alias gp="git push"
+alias gco="git commit -m"
+alias g="git"
+alias gaa="sudo git add ."
