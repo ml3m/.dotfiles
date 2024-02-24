@@ -22,6 +22,8 @@ alias cpconf="rsync -av --progress ~/.config/ ~/github_backup/configs --exclude 
 
 alias cpbashrc="cp ~/.bashrc ~/github_backup"
 
+
+#------------------GIT-Aliases-------------------------
 alias gs="git status"
 alias gp="git push"
 alias gco="git commit -m"
