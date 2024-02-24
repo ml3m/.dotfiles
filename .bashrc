@@ -46,8 +46,12 @@ alias a="ls -a"
 alias e="exit"
 
 #---------------------editing(vim)-------------------
-alias v="vim"
+alias v="sudo vim"
 
 #-----------------------sys--------------------------
 alias sd="shutdown now"
 alias rb="reboot"
+
+#-----------------------package-manager--------------
+alias syu="sudo pacman -Syu"
+#alias
