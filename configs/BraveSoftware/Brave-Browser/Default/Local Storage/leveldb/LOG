@@ -1,0 +1,6 @@
+2024/02/23-03:16:37.011 4 Reusing MANIFEST /home/mlem/.config/BraveSoftware/Brave-Browser/Default/Local Storage/leveldb/MANIFEST-000001
+2024/02/23-03:16:37.013 4 Recovering log #15
+2024/02/23-03:16:37.015 4 Reusing old log /home/mlem/.config/BraveSoftware/Brave-Browser/Default/Local Storage/leveldb/000015.log 
+2024/02/23-03:21:31.335 4 Level-0 table #20: started
+2024/02/23-03:21:31.341 4 Level-0 table #20: 189022 bytes OK
+2024/02/23-03:21:31.343 4 Delete type=0 #15
