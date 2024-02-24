@@ -26,6 +26,6 @@ alias cpbashrc="cp ~/.bashrc ~/github_backup"
 #------------------GIT-Aliases-------------------------
 alias gs="git status"
 alias gp="git push"
-alias gco="git commit -m"
+alias gc="git commit -m"
 alias g="git"
 alias gaa="sudo git add ."
