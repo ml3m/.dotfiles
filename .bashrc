@@ -31,12 +31,12 @@ alias g="git"
 alias gaa="sudo git add ."
 
 #-----------------Current Dir-------------------------
-alias cdd="cd Downloads/"
-alias cdp="cd projects/"
-alias cdads="cd projects/ads/"
-alias cdconfig="cd .config/"
-alias cdc="cd Clearn/"
-alias gh="cd github_backup/"
+alias cdd="cd ~/Downloads/"
+alias cdp="cd ~/projects/"
+alias ads="cd ~/projects/ads/"
+alias cdconfig="cd ~/.config/"
+alias cdc="cd ~/Clearn/"
+alias gh="cd ~/github_backup/"
 alias c="cd .."
 
 #----------------files-------------------------------
