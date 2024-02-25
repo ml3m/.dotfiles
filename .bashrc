@@ -18,7 +18,7 @@ fi
 ##------------------CUSTOM CC--------------------------
 
 # cp confs to main local github repo
-alias cpconf="rsync -av --progress ~/.config/ ~/github_backup/configs --exclude .git --exclude /Code\ -\ OSS --exclude dconf --exclude discord --exclude gtk-3.0 --exclude nvim --exclude BraveSoftware"
+alias cpconf="rsync -av --progress ~/.config/ ~/github_backup/configs --exclude .git --exclude /Code\ -\ OSS --exclude dconf --exclude discord --exclude gtk-3.0 --exclude BraveSoftware"
 
 alias cpbashrc="cp ~/.bashrc ~/github_backup"
 
