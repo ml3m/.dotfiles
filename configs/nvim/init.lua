@@ -1,0 +1,2 @@
+require("mlem")
+print("hello")
