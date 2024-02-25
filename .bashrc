@@ -46,19 +46,13 @@ alias a="ls -a"
 alias e="exit"
 
 #---------------------editing(vim)-------------------
-alias v="sudo vim"
+alias v="vim"
 
 #-----------------------sys--------------------------
 alias sd="shutdown now"
 alias rb="reboot"
 
-<<<<<<< HEAD
 #___scrot___
 
 alias sss="scrot --silent ~/Pictures/ss/%Y-%m-%d-%T-ss.png"
 alias ssel="scrot --silent --select ~/Pictures/ss/%Y-%m-%d-%T-ss.png"
-=======
-#-----------------------package-manager--------------
-alias syu="sudo pacman -Syu"
-#alias
->>>>>>> refs/remotes/origin/main
