@@ -43,9 +43,6 @@ alias a="ls -a"
 #---------------------terminal-----------------------
 alias e="exit"
 
-#---------------------editing(vim)-------------------
-alias v="vim"
-
 #-----------------------sys--------------------------
 alias sd="shutdown now"
 alias rb="reboot"
@@ -53,4 +50,10 @@ alias rb="reboot"
 #___scrot___
 
 alias sss="scrot --silent ~/Pictures/ss/%Y-%m-%d-%T-ss.png"
+
 alias ssel="scrot --silent --select ~/Pictures/ss/%Y-%m-%d-%T-ss.png"
+
+# VIM
+
+alias oldvim="\vim"
+alias vim="nvim"
