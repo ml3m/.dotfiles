@@ -21,5 +21,6 @@ return require('packer').startup(function(use)
   })
 
   use ('nvim-treesitter/nvim-treesitter', {run = ':TSUpdate'})
-  
-end{
+  use ('theprimeagen/harpoon')
+  use ('mbbill/undotree')
+end)
