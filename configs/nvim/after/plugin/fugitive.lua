@@ -6,3 +6,6 @@ end, opts)
 vim.keymap.set("n", "<leader>P", function()
             vim.cmd.Git({'pull',  '--rebase'})
 end, opts)
+
+vim.keymap.set("n", "<leader>aa", ":Git add .", opts);
+--vim.keymap.set("n", "<leader>x", "', opts);

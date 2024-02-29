@@ -20,6 +20,13 @@ fi
 # cp confs to main local github repo
 alias cpconf="rsync -av --progress ~/.config/ ~/github_backup/configs --exclude .git --exclude /Code\ -\ OSS --exclude dconf --exclude discord --exclude gtk-3.0 --exclude BraveSoftware"
 
+cpbashrc() {
+    cp "~/.bashrc" "~/github_backup/bash"
+    cp ~/.bash_profile ~/github_backup/bash
+    cp ~/.bashrc.backup  ~/github_backup/bash
+    cp ~/.bash_logout  ~/github_backup/bash
+}
+
 alias cpbashrc="cp ~/.bashrc ~/github_backup"
 #------------------GIT-Aliases-------------------------
 alias gs="git status"
