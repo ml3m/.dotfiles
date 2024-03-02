@@ -227,10 +227,10 @@ for_window [class="^.*"] border pixel 0
 
 # resolution for ultrawide screen 16:9
 
-exec_always xrandr --output Virtual-1 --mode 2560x1440 
+#exec_always xrandr --output Virtual-1 --mode 2560x1440 
 #exec_always xrandr --output Virtual-1 --mode 3440x1440
 # resolution for laptop screen 16:10
-#exec_always xrandr --output Virtual-1 --mode 2560x1600
+exec_always xrandr --output Virtual-1 --mode 2560x1600
 
 
 # Nitrogen integration
