@@ -1,6 +1,10 @@
-require("obsidian").setup({
-    dir = "~/personal/uvt/uvt/",
-    finder = "telescope.nvim",
+local obsidian = require("obsidian");
 
-    completion = {
-        nvim_cmp = true
+obsidian.setup({
+    workspaces = {
+        {
+            name = "uvt",
+            path = "~/personal/uvt/uvt/"
+        },
+    },
+})
