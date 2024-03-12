@@ -84,6 +84,11 @@ _G.packer_plugins = {
     path = "/home/mlem/.local/share/nvim/site/pack/packer/start/autoclose.nvim",
     url = "https://github.com/m4xshen/autoclose.nvim"
   },
+  ["cellular-automaton.nvim"] = {
+    loaded = true,
+    path = "/home/mlem/.local/share/nvim/site/pack/packer/start/cellular-automaton.nvim",
+    url = "https://github.com/eandrju/cellular-automaton.nvim"
+  },
   ["cmp-buffer"] = {
     loaded = true,
     path = "/home/mlem/.local/share/nvim/site/pack/packer/start/cmp-buffer",

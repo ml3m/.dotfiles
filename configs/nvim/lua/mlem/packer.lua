@@ -24,8 +24,7 @@ return require('packer').startup(function(use)
   use ('theprimeagen/harpoon')
   use ('mbbill/undotree')
   use ('tpope/vim-fugitive')
-  --17:00 
--- lsp to work here:
+
   use {
 	  'VonHeikemen/lsp-zero.nvim',
 	  branch = 'v1.x',
@@ -50,7 +49,7 @@ return require('packer').startup(function(use)
   }
 
   use 'm4xshen/autoclose.nvim'
-
   use 'ThePrimeagen/vim-be-good'
+  use 'eandrju/cellular-automaton.nvim' 
 
 end)
