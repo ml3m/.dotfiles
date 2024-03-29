@@ -65,3 +65,8 @@ alias vim="nvim"
 
 # SourceApps
 alias visual2="~/SourceApps/visualASM/VisUAL2"
+
+
+# xrandr
+alias xlaptop="xrandr --output Virtual-1 --mode 2560x1600"
+alias xwide="xrandr --output Virtual-1 --mode 2560x1440"
