@@ -51,5 +51,6 @@ return require('packer').startup(function(use)
   use 'm4xshen/autoclose.nvim'
   use 'ThePrimeagen/vim-be-good'
   use 'eandrju/cellular-automaton.nvim' 
+  use 'lervag/vimtex'
 
 end)
