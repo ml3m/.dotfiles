@@ -52,5 +52,6 @@ return require('packer').startup(function(use)
   use 'ThePrimeagen/vim-be-good'
   use 'eandrju/cellular-automaton.nvim' 
   use 'lervag/vimtex'
-
+  use "epwalsh/obsidian.nvim"
+  use "nvim-lua/plenary.nvim"
 end)
