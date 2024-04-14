@@ -167,7 +167,7 @@ alias xlaptop="xrandr --output Virtual-1 --mode 2560x1600"
 alias xwide="xrandr --output Virtual-1 --mode 2560x1440"
 
 # docker ~ Ansible testing  
-alias buildcontainer="sudo docker buildx build -f archdockerfile -t ansrepo:ans ."
+alias buildcontainer="sudo docker buildx build -f Dockerfile -t ansrepo:ans ."
 alias deletecontainer="sudo docker rmi -f ansrepo:ans"
 alias runcontainer="sudo docker run -it ansrepo:ans"
 
