@@ -70,7 +70,7 @@ ENABLE_CORRECTION="true"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git)
+plugins=(git zsh-autosuggestions)
 
 source $ZSH/oh-my-zsh.sh
 
@@ -113,16 +113,16 @@ alias ls='ls --color=auto'
 alias grep='grep --color=auto'
 
 # cp confs to main local github repo
-alias cpconf="rsync -av --progress ~/.config/ ~/github_backup/configs --exclude obsidian --exclude .git --exclude VisUAL2 --exclude /Code\ -\ OSS --exclude dconf --exclude discord --exclude gtk-3.0 --exclude BraveSoftware --exclude JetBrains"
+alias cpconf="rsync -av --progress ~/.config/ ~/personal/github_backup/configs --exclude obsidian --exclude .git --exclude VisUAL2 --exclude /Code\ -\ OSS --exclude dconf --exclude discord --exclude gtk-3.0 --exclude BraveSoftware --exclude JetBrains"
 
 cpbash() {
-    cp ~/.bashrc ~/github_backup/bash
-    cp ~/.bash_profile ~/github_backup/bash
-    cp ~/.bashrc.backup  ~/github_backup/bash
-    cp ~/.bash_logout  ~/github_backup/bash
+    cp ~/.bashrc ~/personal/github_backup/bash
+    cp ~/.bash_profile ~/personal/github_backup/bash
+    cp ~/.bashrc.backup  ~/personal/github_backup/bash
+    cp ~/.bash_logout  ~/personal/github_backup/bash
 }
 
-alias cpbashrc="cp ~/.bashrc ~/github_backup"
+alias cpbashrc="cp ~/.bashrc ~/personal/github_backup"
 #------------------GIT-Aliases-------------------------
 alias gs="git status"
 alias gp="git push"
@@ -136,7 +136,7 @@ alias cdp="cd ~/projects/"
 alias ads="cd ~/projects/ads/"
 alias cdconfig="cd ~/.config/"
 alias cdc="cd ~/Clearn/"
-alias gh="cd ~/github_backup/"
+alias gh="cd ~/personal/github_backup/"
 alias c="cd .."
 
 #-----------------------files------------------------
@@ -166,6 +166,10 @@ alias visual2="~/SourceApps/visualASM/VisUAL2"
 alias xlaptop="xrandr --output Virtual-1 --mode 2560x1600"
 alias xwide="xrandr --output Virtual-1 --mode 2560x1440"
 
+# docker ~ Ansible testing  
+alias buildcontainer="sudo docker buildx build -f archdockerfile -t ansrepo:ans ."
+alias deletecontainer="sudo docker rmi -f ansrepo:ans"
+alias runcontainer="sudo docker run -it ansrepo:ans"
 
 # i3 wm
 if [[ -z $DISPLAY ]] && [[ $(tty) = /dev/tty1 ]]; then 

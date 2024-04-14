@@ -1,6 +1,12 @@
 export XDG_CONFIG_HOME=$HOME/.config
 VIM="nvim"
 
+[[ -f ~/.zshrc]] && . ~/.zshrc
+
+if [ -z "$DISPLAY" ] && [ "$XDG_VTNR" = 1 ]; then
+	exec startx
+fi
+
 PERSONAL=$XDG_CONFIG_HOME/personal
 source $PERSONAL/env
 for i in `find -L $PERSONAL`; do
