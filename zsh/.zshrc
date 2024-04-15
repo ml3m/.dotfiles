@@ -170,6 +170,10 @@ alias xwide="xrandr --output Virtual-1 --mode 2560x1440"
 alias buildcontainer="sudo docker buildx build -f Dockerfile -t ansrepo:ans ."
 alias deletecontainer="sudo docker rmi -f ansrepo:ans"
 alias runcontainer="sudo docker run -it ansrepo:ans"
+alias rundaemon="sudo systemctl start docker"
+
+alias deletealldockercontainers='alias alldelimgs="docker rmi -f $(docker images -aq)"'
+
 
 # i3 wm
 if [[ -z $DISPLAY ]] && [[ $(tty) = /dev/tty1 ]]; then 
