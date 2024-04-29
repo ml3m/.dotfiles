@@ -21,7 +21,11 @@ return require('packer').startup(function(use)
   })
 
   use ('nvim-treesitter/nvim-treesitter', {run = ':TSUpdate'})
-  use ('theprimeagen/harpoon')
+  use {
+      "ThePrimeagen/harpoon",
+      branch = "harpoon2",
+      requires = { {"nvim-lua/plenary.nvim"} }
+  }
   use ('mbbill/undotree')
   use ('tpope/vim-fugitive')
 
@@ -54,4 +58,6 @@ return require('packer').startup(function(use)
   use 'lervag/vimtex'
   use "epwalsh/obsidian.nvim"
   use "nvim-lua/plenary.nvim"
+
+
 end)
