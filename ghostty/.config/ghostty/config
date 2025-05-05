@@ -1,8 +1,10 @@
 # Ghostty Configuration
 
+shell-integration = zsh
+
 # Font settings
 font-family = JetBrainsMono NFM SemiBold
-font-size = 44.0
+font-size = 20.0
 
 # Background settings
 background-opacity = 0.8

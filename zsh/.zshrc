@@ -78,7 +78,7 @@ plugins=(git zsh-autosuggestions)
 
 source $ZSH/oh-my-zsh.sh
 
-HISTFILE=~/.dotfilesmacos/zsh/.zsh_history
+HISTFILE=~/.zsh_history
 
 # User configuration
 
@@ -106,6 +106,26 @@ HISTFILE=~/.dotfilesmacos/zsh/.zsh_history
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 #
+#
+#
+# Recommended location for the cache file
+ZSH_COMPDUMP="$HOME/.zcompdump"
+
+# Load the completion cache if it exists and is valid
+if [[ -s "$ZSH_COMPDUMP" && "$ZSH_VERSION" == "$(<"$ZSH_COMPDUMP")" ]]; then
+    source "$ZSH_COMPDUMP"
+else
+    compinit
+fi
+
+# This line is crucial: tell compinit to use and update the cache
+autoload -Uz compinit
+compinit -C -d "$ZSH_COMPDUMP"
+
+# Ensure this is after the compinit calls
+# (The location might vary depending on how you load zsh-autosuggestions)
+# Source your zsh-autosuggestions setup here, e.g.:
+# source /path/to/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh
 #
 ##------------------CUSTOM CC--------------------------
 
@@ -162,7 +182,7 @@ alias oo="~/Library/Mobile\ Documents/iCloud~md~obsidian/Documents/main/"
 alias kill_animation_dock= 'defaults write com.apple.dock autohide-time-modifier -int 0;killall Dock'
 
 
-source $(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+#source $(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh
 export PATH="/usr/local/opt/mysql@8.4/bin:$PATH"
 
 # Set up Qt -> CGAL basic Viewer environment
@@ -173,17 +193,17 @@ export XDG_CONFIG_HOME="$HOME/.config"
 
 export PATH=$PATH:$HOME/go/bin
 
-# bun completions
-[ -s "/Users/mlem/.bun/_bun" ] && source "/Users/mlem/.bun/_bun"
-
-# bun
-export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
-PATH=$(pyenv root)/shims:$PATH
-
-export PYENV_ROOT="$HOME/.pyenv"
-[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init - zsh)"
-
-export PATH=$PATH:$(npm config get prefix)/bin
-
+## bun completions
+#[ -s "/Users/mlem/.bun/_bun" ] && source "/Users/mlem/.bun/_bun"
+#
+## bun
+#export BUN_INSTALL="$HOME/.bun"
+#export PATH="$BUN_INSTALL/bin:$PATH"
+#PATH=$(pyenv root)/shims:$PATH
+#
+#export PYENV_ROOT="$HOME/.pyenv"
+#[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+#eval "$(pyenv init - zsh)"
+#
+#export PATH=$PATH:$(npm config get prefix)/bin
+#

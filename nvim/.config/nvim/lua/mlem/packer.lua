@@ -59,14 +59,6 @@ return require('packer').startup(function(use)
     use "nvim-lua/plenary.nvim"
 
     use({
-        "epwalsh/obsidian.nvim",
-        tag = "*",
-        requires = {
-            "nvim-lua/plenary.nvim",
-        },
-    })
-
-    use({
         'MeanderingProgrammer/render-markdown.nvim',
         after = { 'nvim-treesitter' },
         requires = { 'echasnovski/mini.nvim', opt = true }, -- if you use the mini.nvim suite

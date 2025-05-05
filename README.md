@@ -179,3 +179,4 @@ vim.keymap.set("n", "<leader>oz", ":Telescope live_grep search_dirs={\"/Users/ml
 ```lua
 vim.keymap.set("n", "<leader>of", ":s/\\(# \\)[^_]*_/\\1/ | s/-/ /g<cr>")
 ```
+# .dotfiles
