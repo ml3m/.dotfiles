@@ -126,9 +126,8 @@ compinit -C -d "$ZSH_COMPDUMP"
 # (The location might vary depending on how you load zsh-autosuggestions)
 # Source your zsh-autosuggestions setup here, e.g.:
 # source /path/to/zsh-autosuggestions/zsh-autosuggestions.plugin.zsh
-#
-##------------------CUSTOM CC--------------------------
 
+#------------------CUSTOM CC--------------------------
 bindkey -s ^f "tmux-sessionizer\n"
 bindkey '^ ' autosuggest-accept
 
@@ -146,12 +145,9 @@ alias gss='git log --all --topo-order --graph --show-signature'
 #-----------------Current Dir-------------------------
 alias cdd="cd ~/Downloads/"
 alias c="cd .."
-alias dot="~/.dotfilesmacos/"
 
 #-----------------------files------------------------
-#alias a="ls -a"
 alias a="ls -a"
-alias cat="bat"
 
 #---------------------terminal-----------------------
 alias e="exit"
@@ -164,46 +160,6 @@ alias vim="nvim"
 alias t="tmux"
 alias tk="tmux kill-server"
 
-#-----------------------ICloud--------------------------
-alias ic="~/Library/Mobile\ Documents/com~apple~CloudDocs/"
 
-#----------------------- Obsidian --------------------------
-#old one
-#alias oo="~/Library/Mobile\ Documents/com~apple~CloudDocs/main/"
-alias oo="~/Library/Mobile\ Documents/iCloud~md~obsidian/Documents/main/"
-
-# 'tmux new-session -d -s my_session "vim /path/to/your/file" && tmux attach-session -t my_session'
-# I don't use this.
-# alias todo='tmux new-session -d -s TODO "nvim ~/Library/Mobile\ Documents/com~apple~CloudDocs/main/TODO/todo.org" && tmux attach-session -t TODO'
-
-
-
-#----------------------- MACOS --------------------------
-alias kill_animation_dock= 'defaults write com.apple.dock autohide-time-modifier -int 0;killall Dock'
-
-
-#source $(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-export PATH="/usr/local/opt/mysql@8.4/bin:$PATH"
-
-# Set up Qt -> CGAL basic Viewer environment
-#export PATH="/opt/homebrew/opt/qt/bin:$PATH"
-#export CMAKE_PREFIX_PATH="/opt/homebrew/opt/qt"
 export PATH="$HOME/bin:$PATH"
 export XDG_CONFIG_HOME="$HOME/.config"
-
-export PATH=$PATH:$HOME/go/bin
-
-## bun completions
-#[ -s "/Users/mlem/.bun/_bun" ] && source "/Users/mlem/.bun/_bun"
-#
-## bun
-#export BUN_INSTALL="$HOME/.bun"
-#export PATH="$BUN_INSTALL/bin:$PATH"
-#PATH=$(pyenv root)/shims:$PATH
-#
-#export PYENV_ROOT="$HOME/.pyenv"
-#[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
-#eval "$(pyenv init - zsh)"
-#
-#export PATH=$PATH:$(npm config get prefix)/bin
-#
