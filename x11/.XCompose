@@ -1,0 +1,8 @@
+# Run omarchy-restart-xcompose to apply changes
+
+# Include fast emoji access
+include "/usr/share/omarchy/default/xcompose"
+
+# Identification
+<Multi_key> <space> <n> : "ml3m"
+<Multi_key> <space> <e> : "159339398+ml3m@users.noreply.github.com"

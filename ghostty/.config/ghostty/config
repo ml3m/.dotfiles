@@ -1,0 +1,29 @@
+# Ghostty Configuration
+# Cool Shaders
+# custom-shader = ./shaders_scrap/retro-terminal.glsl
+custom-shader = ./shaders/cursor_warp.glsl
+custom-shader-animation = always
+
+# Font settings
+font-family = JetBrainsMono NFM SemiBold
+font-size = 22.0
+
+# Background settings
+background-opacity = 0.8
+
+background-blur-radius = 100
+
+# Window decorations
+# hide_window_decorations = titlebar-only
+#window-decoration = false
+macos-titlebar-style = hidden
+window-save-state = always
+
+selection-background = #ffffff
+
+## cursor very light purple--
+# changed it to white
+cursor-color = #a9a5c2 
+cursor-text = #e0def4
+
+theme = Rose Pine Moon

@@ -1,0 +1,6 @@
+[tools]
+codex = "latest"
+node = "25.7.0"
+
+[settings.upgrade]
+auto_prune = false

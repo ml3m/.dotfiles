@@ -1,0 +1,6 @@
+# Ignore macOS/Windows specific files
+.DS_Store
+Thumbs.db
+
+# Do not track stow local ignore files if any
+# .stow-local-ignore

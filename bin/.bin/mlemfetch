@@ -1,0 +1,746 @@
+#!/bin/bash
+
+# Color mode configuration: "random" or "gradient"
+default_color="random"
+
+# Gradient palette selection: "sunset", "ocean", "forest", "neon"
+gradient_theme="neon"
+
+# Colors array for random mode
+colors=(
+  '\033[31m' # Red
+  '\033[32m' # Green
+  '\033[33m' # Yellow
+  '\033[34m' # Blue
+  '\033[35m' # Purple
+  '\033[36m' # Cyan
+  '\033[91m' # Light Red
+  '\033[92m' # Light Green
+  '\033[93m' # Light Yellow
+  '\033[94m' # Light Blue
+  '\033[95m' # Light Purple
+  '\033[96m' # Light Cyan
+)
+NC='\033[0m' # No Color
+WHITE='\033[97m' # White
+
+# Gradient palette themes - aesthetically pleasing color combinations
+gradient_palette_sunset=(224 216 208 172 136 94 52)     # Warm sunset: peach → orange → deep orange → brown
+gradient_palette_ocean=(159 123 87 51 45 39 33)         # Ocean depths: light blue → teal → deep blue → navy
+gradient_palette_forest=(154 148 142 106 70 64 22)      # Forest vibes: light green → yellow-green → dark green
+gradient_palette_neon=(201 165 129 93 57 21 196)        # Neon cyberpunk: pink → purple → blue → cyan → red
+
+# Set active gradient palette based on theme
+case $gradient_theme in
+  "sunset")  gradient_palette=("${gradient_palette_sunset[@]}") ;;
+  "ocean")   gradient_palette=("${gradient_palette_ocean[@]}") ;;
+  "forest")  gradient_palette=("${gradient_palette_forest[@]}") ;;
+  "neon")    gradient_palette=("${gradient_palette_neon[@]}") ;;
+  *)         gradient_palette=("${gradient_palette_sunset[@]}") ;;  # Default to sunset
+esac
+gradient_base_hue=260
+gradient_pastel_sat=0.35
+gradient_pastel_light=0.85
+gradient_base_span_deg=20
+gradient_per_char_span_deg=6
+gradient_max_span_deg=300
+
+# Padding settings
+LEFT_PADDING=4 # Number of spaces for left padding
+TOP_PADDING=2 # Number of empty lines for top padding
+BOTTOM_PADDING=2 # Number of empty lines for bottom padding
+delay=${1:-0.30}
+
+# Get System Information
+get_os() {
+  source /etc/os-release 2>/dev/null && echo "${NAME:-Linux}"
+}
+
+get_os_version() {
+  source /etc/os-release 2>/dev/null && echo "${VERSION_ID:-}"
+}
+
+get_hostname() {
+  hostname
+}
+
+get_user() {
+  whoami
+}
+
+get_packages() {
+  local pkgs
+  pkgs=$(pacman -Q 2>/dev/null | wc -l)
+  echo "${pkgs} (pacman)"
+}
+
+get_uptime() {
+  # Read uptime from /proc/uptime (seconds since boot)
+  read -r s _ < /proc/uptime
+  s=${s%.*}  # truncate to integer
+
+  local d h m
+  d=$((s / 60 / 60 / 24))
+  h=$((s / 60 / 60 % 24))
+  m=$((s / 60 % 60))
+
+  local d_str h_str m_str
+  (( d == 1 )) && d_str="$d day" || d_str="$d days"
+  (( h == 1 )) && h_str="$h hour" || h_str="$h hours"
+  (( m == 1 )) && m_str="$m minute" || m_str="$m minutes"
+
+  local uptime
+  (( d > 0 )) && uptime+="${d_str}, "
+  (( h > 0 )) && uptime+="${h_str}, "
+  uptime+="$m_str"
+
+  echo "$uptime"
+}
+
+get_shell() {
+  basename "$SHELL"
+}
+
+get_terminal() {
+  # Prioritize iTerm2
+  if [[ -n "$ITERM_SESSION_ID" ]]; then
+    echo "iTerm2"
+    return
+  fi
+
+  # Check for Ghostty
+  if [[ -n "$GHOSTTY_VERSION" ]]; then
+    echo "Ghostty"
+    return
+  fi
+
+  # Check if running inside tmux
+  if [[ -n "$TMUX" ]]; then
+    # If inside tmux, try to get the underlying terminal from $TERM_PROGRAM
+    if [[ -n "$TERM_PROGRAM" ]]; then
+      echo "$TERM_PROGRAM"
+      return
+    fi
+    # If $TERM_PROGRAM is not set, fallback to $TERM (might still be tmux)
+    if [[ -n "$TERM" ]]; then
+      echo "$TERM"
+      return
+    fi
+  fi
+
+  # Check for common terminal emulators (outside tmux)
+  if [[ -n "$VTE_VERSION" ]]; then
+    echo "GNOME Terminal"
+    return
+  fi
+
+  if [[ -n "$KONSOLE_VERSION" ]]; then
+    echo "Konsole"
+    return
+  fi
+
+  # Check for VS Code integrated terminal
+  if [[ -n "$VSCODE_PID" ]]; then
+    echo "VS Code"
+    return
+  fi
+
+  # Check for Hyper.js
+  if [[ -n "$TERM_PROGRAM" && "$TERM_PROGRAM" == "Hyper" ]]; then
+    echo "Hyper"
+    return
+  fi
+
+  # If TERM is screen-256color, try to infer from $TERM_PROGRAM
+  if [[ "$TERM" == "screen-256color" ]]; then
+    if [[ -n "$TERM_PROGRAM" ]]; then
+      echo "$TERM_PROGRAM"
+      return
+    fi
+  fi
+
+  # Fallback to $TERM (if it's not screen-256color or already handled)
+  if [[ -n "$TERM" ]]; then
+    echo "$TERM"
+    return
+  fi
+
+  # Last resort: use tty
+  tty | sed 's/\/dev\///'
+}
+
+get_cpu() {
+  grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | sed 's/^ //;s/ with.*$//;s/ *$//'
+}
+
+get_memory() {
+  local total used free
+  total=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+  free=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
+  used=$(( (total - free) / 1024 ))
+  total_mb=$((total / 1024))
+  echo "${used}MiB / ${total_mb}MiB"
+}
+
+get_disk() {
+  df -h / | awk 'NR==2 {print $2}' | sed 's/GiB/GB/g'
+}
+
+# Simplified gradient function using palette mode
+# This avoids complex HSL calculations and uses the predefined color palette
+
+gradient_color_for_index() {
+  local i=$1 len=$2
+  
+  # Use palette mode with the configured colors
+  local stops=${#gradient_palette[@]}
+  if (( stops <= 1 || len <= 1 )); then
+    echo "${gradient_palette[0]:-196}"
+    return
+  fi
+  
+  local numerator=$(( i * (stops - 1) ))
+  local denominator=$(( len - 1 ))
+  local idx=$(( numerator / denominator ))
+  [[ $idx -lt 0 ]] && idx=0
+  [[ $idx -ge $stops ]] && idx=$((stops - 1))
+  
+  echo "${gradient_palette[$idx]}"
+}
+
+# Moving gradient function with smooth interpolation
+gradient_color_for_index_moving() {
+  local pos=$1
+  
+  local stops=${#gradient_palette[@]}
+  if (( stops <= 1 )); then
+    echo "${gradient_palette[0]:-196}"
+    return
+  fi
+  
+  # Create a much larger virtual palette by expanding each color multiple times
+  local expansion_factor=20  # Each color appears 20 times for smoother transitions
+  local total_virtual_colors=$((stops * expansion_factor))
+  
+  # Map position to virtual palette with cycling
+  local virtual_pos=$((pos % total_virtual_colors))
+  [[ $virtual_pos -lt 0 ]] && virtual_pos=$((total_virtual_colors + virtual_pos))
+  
+  # Find which actual color this virtual position maps to
+  local actual_idx=$((virtual_pos / expansion_factor))
+  [[ $actual_idx -ge $stops ]] && actual_idx=$((stops - 1))
+  
+  echo "${gradient_palette[$actual_idx]}"
+}
+
+# Function to colorize a string randomly
+# Function to colorize a string randomly
+colorize_string() {
+    local string="$1"
+    local result=""
+    local -i len=${#string}
+    local skip_next=0
+    
+    for ((i = 0; i < len; i++)); do
+        # Skip this iteration if we're in the middle of an escape sequence
+        if ((skip_next > 0)); then
+            skip_next=$((skip_next - 1))
+            continue
+        fi
+        
+        local char="${string:$i:1}"
+        
+        # Handle backslash escapes
+        if [[ "$char" == "\\" ]]; then
+            # Peek at next character
+            if ((i + 1 < len)); then
+                next_char="${string:$i+1:1}"
+                # Keep backslash and next character together
+                result+="${colors[$((RANDOM % ${#colors[@]}))]}\\${next_char}${NC}"
+                skip_next=1
+                continue
+            fi
+        fi
+        
+        # Handle single quotes
+        if [[ "$char" == "'" ]]; then
+            # Peek at surrounding characters for escape sequence
+            if ((i > 0)) && [[ "${string:$i-1:1}" == "\\" ]]; then
+                continue  # Skip this quote as it's part of an escape sequence
+            fi
+        fi
+        
+        # Regular character coloring
+        if [[ "$char" != " " ]]; then
+            result+="${colors[$((RANDOM % ${#colors[@]}))]}${char}${NC}"
+        else
+            result+="$char"
+        fi
+    done
+    
+    echo -e "$result"
+}
+
+# Function to colorize a string with moving diagonal gradient
+colorize_string_gradient() {
+    local string="$1"
+    local line_index="$2"  # Which line this is in the overall ASCII art
+    local total_lines="$3" # Total lines in the ASCII art
+    local animation_offset="$4" # Animation frame offset for movement
+    local result=""
+    local -i len=${#string}
+    local skip_next=0
+    
+    # Gradient spacing factor - very small for smooth transitions
+    local spacing_factor=1
+    
+    for ((i = 0; i < len; i++)); do
+        # Skip this iteration if we're in the middle of an escape sequence
+        if ((skip_next > 0)); then
+            skip_next=$((skip_next - 1))
+            continue
+        fi
+        
+        local char="${string:$i:1}"
+        
+        # Handle backslash escapes
+        if [[ "$char" == "\\" ]]; then
+            # Peek at next character
+            if ((i + 1 < len)); then
+                next_char="${string:$i+1:1}"
+                # Calculate moving diagonal gradient position
+                local diagonal_pos=$(((line_index + i + animation_offset) / spacing_factor))
+                local color_code=$(gradient_color_for_index_moving $diagonal_pos)
+                local color_escape="\033[38;5;${color_code}m"
+                # Keep backslash and next character together
+                result+="${color_escape}\\${next_char}${NC}"
+                skip_next=1
+                continue
+            fi
+        fi
+        
+        # Handle single quotes
+        if [[ "$char" == "'" ]]; then
+            # Peek at surrounding characters for escape sequence
+            if ((i > 0)) && [[ "${string:$i-1:1}" == "\\" ]]; then
+                continue  # Skip this quote as it's part of an escape sequence
+            fi
+        fi
+        
+        # Regular character coloring
+        if [[ "$char" != " " ]]; then
+            # Calculate moving diagonal gradient position with spacing
+            local diagonal_pos=$(((line_index + i + animation_offset) / spacing_factor))
+            local color_code=$(gradient_color_for_index_moving $diagonal_pos)
+            local color_escape="\033[38;5;${color_code}m"
+            result+="${color_escape}${char}${NC}"
+        else
+            result+="$char"
+        fi
+    done
+    
+    echo -e "$result"
+}
+
+# Main colorize function that chooses between random and gradient modes
+colorize_string_main() {
+    local string="$1"
+    local line_index="$2"
+    local total_lines="$3"
+    local animation_offset="$4"
+    
+    if [[ "$default_color" == "gradient" ]]; then
+        colorize_string_gradient "$string" "$line_index" "$total_lines" "$animation_offset"
+    else
+        colorize_string "$string"
+    fi
+}
+
+# Function to get the visual length of a string (excluding color codes)
+get_visual_length() {
+  local string="$1"
+  echo -n "$string" | sed 's/\x1b\[[0-9;]*m//g' | wc -c
+}
+
+# Function to print empty lines
+print_empty_lines() {
+  local count=$1
+  for ((i = 0; i < count; i++)); do
+    echo
+  done
+}
+
+# Prepare system information with different colors for each row
+hostname_text="$(get_user)@$(get_hostname)"
+hostname_line="${WHITE}${hostname_text}${NC}"
+
+# Calculate separator length based on the text content of the first line
+separator_length=${#hostname_text}
+separator=$(printf "%${separator_length}s" | tr " " "-")
+
+sys_info=(
+  "$hostname_line" # Added Host/Name in white
+  "${colors[8]}${separator}${NC}"
+  "${colors[0]}OS: $(get_os) $(get_os_version)${NC}"
+  "${colors[1]}Uptime: $(get_uptime)${NC}"
+  "${colors[2]}Shell: $(get_shell)${NC}"
+  "${colors[3]}Terminal: $(get_terminal)${NC}"
+  #"${colors[7]}Packages: $(get_packages)${NC}"
+  "${colors[4]}CPU: $(get_cpu)${NC}"
+  "${colors[5]}Memory: $(get_memory)${NC}"
+  "${colors[6]}Disk: $(get_disk)${NC}"
+)
+
+
+# used for allignment and spaces assist
+#       _
+#       \`*-.
+#        )  _`-.
+#       .  : `. .
+#       : _   '  \
+#       ; *` _.   `*-._
+#       `-.-'          `-.
+#         ;       `       `.
+#         :.       .        \
+#         . \  .   :   .-'   .
+#         '  `+.;  ;  '      :
+#         :  '  |  ,  ;       ;-.
+#         ; '   : :`-:     _.`* ; 
+#[bug] .*' /  .*' ; .*`- +'  `*'
+#      `*-*   `*-*  `*-*'
+
+
+
+# Animation frames array
+# Frame 0 (air in)
+# fixed formating
+frame_0=(
+'                               '
+'                               '
+'       _'
+'       \`*-.'
+'        )  _`-.'
+'       .  : `. .'
+'       : _   '\''  \\'
+'       ; *` _.   `*-._'
+'       `-.-'\''          `-.   '
+'         ;       `       `.    '
+'         :.       .        \\'
+'         . \\  .   :   .-'\''   .'
+'         '\''  `+.;  ;  '\''      :'
+'         :  '\''  |  ,  ;       ;-.'
+'         ; '\''   : :`-:     _.`*  ;'
+'[bug] .*'\'' /  .*'\'' ; .*`- +'\''  `*'\''*'
+'      `*-*   `*-*  `*-*'\''       '
+)
+
+
+# Frame 1 (air out)
+# fixed formating
+frame_1=(
+'                               '
+'                               '
+''
+'       _                        '
+'       \`*-.                    '
+'        )  _`-.                 '
+'       .  : `. .                '
+'       : _   '\''  \\               '
+'       / *` _.   `*-._          '
+'       `-.-'\''          `-.       '
+'         :.              \\    '
+'         . \\      `   .-. .   '
+'         '\''  ._ ;  ;  '\''     :   '
+'         :  , `|  ,  ;      ;-.'
+'         ; '\''   : :`-:    _.`*  ;'
+'[bug] .*'\'' /  .*'\'' ; .*`- +'\''  `*'\'' '
+'      `*-*   `*-*  `*-*'\''       '
+)
+
+# Frame 2 (paw)
+frame_2=(
+'                               '
+'                               '
+''
+'        _                        '
+'        \`*,.                   '
+'        /  _ `-.                 '
+'       .  : `, `.                '
+'       ; _   '\''  |               '
+'       / *` _,   `*-._          '
+'       `-`'\''           `-.       '
+'         : .             \\    '
+'         ; ;      `   .-. .   '
+'        , ; `. ;  ;  '\''     :   '
+'    .*'\''` /    `|  ,  ;      ;-.'
+'    `*-'\''`      ; :`-:    _.`*  ;'
+'[bug]        .*'\'' ; .*`- +`  `*'\'' '
+'             `*-*  `*-*'\''       '
+)
+
+# Frame 3 (bug to mouth 1)
+frame_3=(
+'                               '
+'                               '
+''
+'        _                        '
+'        \`*,.                   '
+'        /  _ `-.                 '
+'       .  : `, `.                '
+'       ; _   '\''  |               '
+'       / *` _,   `*-._          '
+'       `-`'\''           `-.       '
+'         : .             \\    '
+'         ; ;      `   .-. .   '
+' [bug]  , ; `. ;  ;  '\''     :   '
+'    .*'\''` /    `|  ,  ;      ;-.'
+'    `*-'\''`      ; :`-:    _.`*  ;'
+'             .*'\'' ; .*`- +`  `*'\'' '
+'             `*-*  `*-*'\''       '
+)
+
+# Frame 4 (bug to mouth 2)
+frame_4=(
+'                               '
+'                               '
+''
+'        _                        '
+'        \`*,.                   '
+'        /  _ `-.                 '
+'       .  : `, `.                '
+'       ; _   '\''  |               '
+'       / *` _,   `*-._          '
+'       `-`'\''           `-.       '
+'         : .             \\    '
+'   [bug], ,;      `   .-. .   '
+'    ,-'\''` /  `. ;  ;  '\''     :   '
+'    `*-'\''`     `|  ,  ;      ;-.'
+'               ; :`-:    _.`*  ;'
+'             .*'\'' ; .*`- +`  `*'\'' '
+'             `*-*  `*-*'\''       '
+)
+
+# Frame 5 (bug to mouth 3)
+frame_5=(
+'                               '
+'                               '
+''
+'        _                        '
+'        \`*,.                   '
+'        /  _ `-.                 '
+'       .  : `, `.                '
+'       ; _   '\''  |               '
+'       / *` _,   `*-._          '
+'       `-`'\''           `-.       '
+'    [bug]: ,             \\    '
+'    ;`'\''` /,;      `   .-. .   '
+'    `*-'\''`   `. ;  ;  '\''     :   '
+'              `|  ,  ;      ;-.'
+'               ; :`-:    _.`*  ;'
+'             .*'\'' ; .*`- +`  `*'\'' '
+'             `*-*  `*-*'\''       '
+)
+
+# Frame 6 (back to paw)
+frame_6=(
+'                               '
+'                               '
+''
+'        _                        '
+'        \`*,.                   '
+'        /  _ `-.                 '
+'       .  : `, `.                '
+'       ; _   '\''  |               '
+'       / *` _,   `*-._          '
+'       `-`'\''           `-.       '
+'         : .             \\    '
+'         ; ;      `   .-. .   '
+'        , ; `. ;  ;  '\''     :   '
+'    .*'\''` /    `|  ,  ;      ;-.'
+'    `*-'\''`      ; :`-:    _.`*  ;'
+'             .*'\'' ; .*`- +`  `*'\'' '
+'             `*-*  `*-*'\''       '
+)
+
+# Array of frame variable names
+frames=(frame_0 frame_1 frame_2 frame_3 frame_4 frame_5 frame_6)
+# Function to move cursor up N lines
+move_cursor_up() {
+    local lines=$1
+    tput cuu $lines
+}
+
+# Function to save cursor position
+save_cursor_position() {
+    tput sc
+}
+
+# Function to restore cursor position
+restore_cursor_position() {
+    tput rc
+}
+
+# Function to continuously update colors and animate frames
+update_colors() {
+    local frame_count=${#frames[@]}
+    local current_frame=0
+    local color_update_counter=0
+    local color_updates_per_frame=5  # Change colors 5 times per frame change
+    local gradient_animation_offset=0  # Track gradient movement
+    
+    # Safety check to avoid division by zero
+    if [ "$frame_count" -eq 0 ]; then
+        echo "Error: No frames available for animation"
+        return 1
+    fi
+    
+    while true; do
+        # Save current cursor position
+        save_cursor_position
+        
+        # Build the entire frame as a single string
+        local frame_output=""
+        local frame_name="${frames[$current_frame]}"
+        eval "current_frame_array=(\"\${${frame_name}[@]}\")"
+        
+        for i in "${!current_frame_array[@]}"; do
+            # Create colored version of the frame line using main colorize function with animation offset
+            colored_logo=$(colorize_string_main "${current_frame_array[$i]}" "$i" "${#current_frame_array[@]}" "$gradient_animation_offset")
+            
+            # Add line clearing and content
+            frame_output+="\r\033[K"
+            
+            # Build the line with system info if needed
+            if [ $i -ge $start_line ] && [ $((i - start_line)) -lt ${#sys_info[@]} ]; then
+                visual_length=$(get_visual_length "${current_frame_array[$i]}")
+                padding_spaces=$((total_logo_width - visual_length))
+                padding=$(printf "%${padding_spaces}s" "")
+                frame_output+="${left_padding}${colored_logo}${padding}${sys_info[$((i - start_line))]}"
+            else
+                frame_output+="${left_padding}${colored_logo}"
+            fi
+            
+            # Add newline except for last line
+            if [ $i -lt $((${#current_frame_array[@]} - 1)) ]; then
+                frame_output+="\n"
+            fi
+        done
+        
+        # Print the entire frame at once
+        printf "%b" "$frame_output"
+        
+        # Restore cursor position
+        restore_cursor_position
+        
+        # Increment color update counter and gradient animation offset
+        color_update_counter=$((color_update_counter + 1))
+        gradient_animation_offset=$((gradient_animation_offset + 3))  # Smooth movement speed
+        
+        # Define frame delays
+        local frame_delay
+        if [[ $current_frame -ge 2 ]]; then
+          frame_delay=0.10  # Bug eating animation (frames 2 to end)
+        else
+          frame_delay="$delay"  # Breathing animation (frames 0-1) use delay variable (0.30)
+        fi
+        
+        # Color update sleep (much faster than frame changes)
+        local color_sleep=0.12  # Base color update speed (increased from 0.06 for slower color changes)
+        sleep "$color_sleep"
+
+        # Calculate required updates based on frame delay
+        # required_updates = frame_delay / color_sleep
+        local required_updates
+        if [[ $current_frame -ge 2 ]]; then
+            # For bug eating: 0.10 / 0.12 ≈ 0.83, round to 1
+            required_updates=1
+        else
+            # For breathing: 0.30 / 0.12 = 2.5, round to 3
+            required_updates=3
+        fi
+        
+        if [ $color_update_counter -ge $required_updates ]; then
+            current_frame=$(( (current_frame + 1) % frame_count ))
+            color_update_counter=0
+        fi
+    done
+}
+
+
+cleanup() {
+    tput cnorm # Restore cursor
+    clear
+    exit
+}
+
+# Trap SIGINT and SIGTERM to clean up properly
+trap cleanup SIGINT SIGTERM
+
+# Hide the cursor
+tput civis
+
+# clear 
+clear
+
+# Print top padding
+print_empty_lines $TOP_PADDING
+
+
+get_visual_length() {
+    local string="$1"
+    # Remove color codes and count actual visible characters
+    # Then remove escape characters from the count
+    echo -n "$string" | 
+        sed 's/\x1b\[[0-9;]*m//g' | 
+        sed 's/\\./x/g' | # Replace escaped chars with single char
+        wc -m | 
+        tr -d ' '
+}
+
+# Create left padding string
+left_padding=$(printf "%${LEFT_PADDING}s" "")
+
+# Calculate the maximum length across ALL frames for consistent alignment
+max_logo_length=0
+for frame_name in "${frames[@]}"; do
+    eval "current_frame=(\"\${${frame_name}[@]}\")"
+    for line in "${current_frame[@]}"; do
+        current_length=$(get_visual_length "$line")
+        if ((current_length > max_logo_length)); then
+            max_logo_length=$current_length
+        fi
+    done
+done
+
+# Add padding between logo and info
+padding=20
+
+# Starting line for system information (0-based index)
+start_line=5
+
+total_logo_width=$((max_logo_length + padding))
+
+# Print first frame and information side by side
+# Create a temporary array to reference the first frame
+eval "initial_frame=(\"\${frame_0[@]}\")"
+for i in "${!initial_frame[@]}"; do
+    colored_logo=$(colorize_string_main "${initial_frame[$i]}" "$i" "${#initial_frame[@]}" "0")
+    
+    if [ $i -ge $start_line ] && [ $((i - start_line)) -lt ${#sys_info[@]} ]; then
+        visual_length=$(get_visual_length "${initial_frame[$i]}")
+        padding_spaces=$((total_logo_width - visual_length))
+        padding=$(printf "%${padding_spaces}s" "")
+        echo -e "${left_padding}${colored_logo}${padding}${sys_info[$((i - start_line))]}"
+    else
+        echo -e "${left_padding}${colored_logo}"
+    fi
+done
+
+# Print bottom padding
+print_empty_lines $BOTTOM_PADDING
+
+# Move cursor up to the start of the logo
+move_cursor_up $((${#frame_0[@]} + BOTTOM_PADDING))
+
+# Start the color update loop
+update_colors
