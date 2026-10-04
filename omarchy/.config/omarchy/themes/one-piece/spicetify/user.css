@@ -1,0 +1,152 @@
+:root,
+.encore-dark-theme,
+.encore-base-set,
+.encore-inverted-light-set {
+    --background-highlight: rgba(var(--spice-rgb-highlight), 0.25) !important;
+}
+
+.main-nowPlayingBar-container {
+    background-color: var(--background-base);
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    color: var(--spice-text);
+}
+
+.main-entityHeader-backgroundColor {
+    display: none !important;
+}
+
+.main-actionBarBackground-background {
+    display: none !important;
+}
+
+.main-home-homeHeader {
+    display: none !important;
+}
+
+.main-topBar-background,
+.main-home-filterChipsSection {
+    background-color: var(--spice-main) !important;
+}
+
+/* One Piece Theme Overrides */
+.main-background {
+    background-color: #fefefe !important;
+}
+
+.main-home-content,
+.main-view-container {
+    background-color: #fefefe !important;
+}
+
+.x whats-new-changelog {
+    background-color: #fefefe !important;
+}
+
+/* Dark text on light backgrounds */
+.span,
+.artist .name,
+.album .title,
+.tracklist .track-name,
+.main-type-mesto,
+.main-type-ballad,
+.main-entityTitle-title,
+.main-entityTitle-secondary,
+.main-contextMenu-menuItemButton,
+.main-dropdown-dropdown,
+.x-searchInput-searchInput {
+    color: #412a1e !important;
+}
+
+/* Sidebar navigation */
+.main-leftSidebar-root,
+.main-leftSidebar-content {
+    background-color: #f8de3c !important;
+}
+
+.main-leftSidebar-item,
+.main-navItem {
+    color: #412a1e !important;
+}
+
+.main-leftSidebar-item:hover,
+.main-navItem:hover {
+    background-color: rgba(200, 71, 44, 0.2) !important;
+}
+
+.main-leftSidebar-itemSelected {
+    background-color: #c8472c !important;
+    color: #fefefe !important;
+}
+
+/* Play button */
+.main-playButton-button {
+    background-color: #c8472c !important;
+    color: #fefefe !important;
+}
+
+/* Progress bar */
+.progress-bar {
+    background-color: #f8de3c !important;
+}
+
+.progress-bar-fill {
+    background-color: #c8472c !important;
+}
+
+/* Heart/like button */
+.main-likeButton-button {
+    color: #c8472c !important;
+}
+
+/* Volume slider */
+.volume-bar {
+    background-color: #f8de3c !important;
+}
+
+.volume-bar-fill {
+    background-color: #c8472c !important;
+}
+
+/* Currently playing */
+.main-nowPlayingWidget-nowPlaying {
+    color: #412a1e !important;
+}
+
+.main-trackInfo-name,
+.main-trackInfo-artists {
+    color: #412a1e !important;
+}
+
+/* Playlists */
+.main-playlistPlaylistList-item {
+    color: #412a1e !important;
+}
+
+.main-playlistPlaylistList-item:hover {
+    background-color: rgba(200, 71, 44, 0.1) !important;
+}
+
+/* Search */
+.x-searchInput-searchInput {
+    background-color: #fefefe !important;
+    border: 1px solid #c8472c !important;
+    color: #412a1e !important;
+}
+
+/* Buttons */
+.x-button {
+    color: #c8472c !important;
+}
+
+/* Links */
+.main-entityLink-link {
+    color: #105edd !important;
+}
+
+/* Subtitles and secondary text */
+.main-entityTitle-secondary,
+.main-type-mesto,
+.main-type-ballad {
+    color: #a08060 !important;
+}

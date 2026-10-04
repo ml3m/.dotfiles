@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Add background</title>
+  <desc id="desc">An empty black background slot with a large white plus sign.</desc>
+  <rect width="1600" height="1000" fill="#000000"/>
+  <path d="M800 300v400M600 500h400" fill="none" stroke="#ffffff"
+        stroke-width="40" stroke-linecap="round"/>
+</svg>

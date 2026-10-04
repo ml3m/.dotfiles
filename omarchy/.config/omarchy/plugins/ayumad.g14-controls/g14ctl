@@ -1,0 +1,930 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Allowlisted ASUS controller used by the G14 Controls Omarchy plugin.
+# It talks to asusd through asusctl; no administrative access is requested here.
+
+notify() {
+  if command -v omarchy-notification-send >/dev/null 2>&1; then
+    omarchy-notification-send -g  "G14" "$*" >/dev/null 2>&1 || true
+  elif command -v notify-send >/dev/null 2>&1; then
+    notify-send "G14" "$*" >/dev/null 2>&1 || true
+  fi
+}
+
+# Profile cycling can be triggered quickly from the hardware key.  Keep one
+# notification per login session and replace its contents on every change.
+# Never use a shared directory such as /tmp for this state: the path is written
+# after a notification change and must not be vulnerable to symlink redirection.
+profile_notification_state_dir="${XDG_RUNTIME_DIR:-${XDG_STATE_HOME:-${HOME}/.local/state}}/ayumad.g14-controls"
+profile_notification_file="$profile_notification_state_dir/g14ctl-profile-notification-${UID}"
+
+write_profile_notification_id() {
+  local temporary
+
+  [[ -d "$profile_notification_state_dir" ]] \
+    || mkdir -p -- "$profile_notification_state_dir" \
+    || return 1
+  [[ ! -L "$profile_notification_state_dir" && -O "$profile_notification_state_dir" ]] \
+    || return 1
+  chmod 700 -- "$profile_notification_state_dir" || return 1
+
+  # Create a uniquely named file, then rename it into place.  The directory
+  # is private to this user, and rename replaces (rather than follows) a
+  # pre-existing symlink at the destination.
+  temporary=$(mktemp -- "$profile_notification_state_dir/.g14ctl-profile-notification.XXXXXX") \
+    || return 1
+  if ! (umask 077; printf '%s\n' "$1" > "$temporary"); then
+    rm -f -- "$temporary"
+    return 1
+  fi
+  if ! mv -f -- "$temporary" "$profile_notification_file"; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+}
+
+notify_profile() {
+  local replace_id="" notification_id=""
+  [[ -r "$profile_notification_file" ]] && read -r replace_id < "$profile_notification_file" || true
+
+  if command -v omarchy-notification-send >/dev/null 2>&1; then
+    if [[ "$replace_id" =~ ^[1-9][0-9]*$ ]]; then
+      notification_id=$(omarchy-notification-send -g  "G14" "$*" -r "$replace_id" -p 2>/dev/null || true)
+    else
+      notification_id=$(omarchy-notification-send -g  "G14" "$*" -p 2>/dev/null || true)
+    fi
+  elif command -v notify-send >/dev/null 2>&1; then
+    if [[ "$replace_id" =~ ^[1-9][0-9]*$ ]]; then
+      notification_id=$(notify-send -p -r "$replace_id" "G14" "$*" 2>/dev/null || true)
+    else
+      notification_id=$(notify-send -p "G14" "$*" 2>/dev/null || true)
+    fi
+  fi
+
+  if [[ "$notification_id" =~ ^[1-9][0-9]*$ ]]; then
+    write_profile_notification_id "$notification_id" 2>/dev/null || true
+  else
+    notify "$@"
+  fi
+}
+
+refresh_profile_widget() {
+  local profile="${1:-}"
+  command -v omarchy-shell >/dev/null 2>&1 \
+    && omarchy-shell -q ayumad.g14-controls profileChanged "$profile" >/dev/null 2>&1 \
+    || true
+}
+
+die() {
+  printf 'g14ctl: %s\n' "$*" >&2
+  exit 2
+}
+
+asusctl_bin="${ASUSCTL_BIN:-$(command -v asusctl || true)}"
+[[ -x "$asusctl_bin" ]] || die "asusctl is not installed or not on PATH"
+command -v jq >/dev/null 2>&1 || die "jq is required for status output"
+
+plugin_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+aura_lock_state_dir="${XDG_STATE_HOME:-${HOME}/.local/state}/ayumad.g14-controls"
+aura_lock_file="$aura_lock_state_dir/keyboard-lighting.lock"
+gpu_pending_file="$aura_lock_state_dir/gpu-mode.pending"
+aura_lock_hook="${XDG_CONFIG_HOME:-${HOME}/.config}/omarchy/hooks/theme-set.d/ayumad-g14-controls"
+aura_lock_hook_template="$plugin_dir/theme-set-hook"
+hypr_config_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/hypr"
+hypr_bindings_file="$hypr_config_dir/bindings.lua"
+g14ctl_wrapper_dir="${HOME}/.local/bin"
+g14ctl_wrapper="$g14ctl_wrapper_dir/g14ctl"
+hotkey_block_start="-- BEGIN ayumad.g14-controls hotkeys"
+hotkey_block_end="-- END ayumad.g14-controls hotkeys"
+
+read_value() {
+  local path="$1"
+  if [[ -r "$path" ]]; then
+    tr -d '[:space:]' < "$path"
+  else
+    printf '?'
+  fi
+}
+
+sysfs_value() {
+  local name="$1" path
+  for path in \
+    "/sys/devices/platform/asus-nb-wmi/$name" \
+    "/sys/devices/platform/asus-wmi/$name"; do
+    if [[ -r "$path" ]]; then
+      tr -d '[:space:]' < "$path"
+      return
+    fi
+  done
+  printf '?'
+}
+
+gpu_mode() {
+  local disabled mux
+  disabled=$(sysfs_value dgpu_disable)
+  mux=$(sysfs_value gpu_mux_mode)
+  if [[ "$disabled" == 1 ]]; then
+    printf 'integrated'
+  elif [[ "$mux" == 0 ]]; then
+    printf 'ultimate'
+  elif [[ "$mux" == 1 ]]; then
+    printf 'hybrid'
+  else
+    printf 'unknown'
+  fi
+}
+
+gpu_pending_mode() {
+  local requested="" current
+  [[ -r "$gpu_pending_file" ]] || { printf ''; return 0; }
+  IFS= read -r requested < "$gpu_pending_file" || true
+  case "$requested" in
+    integrated|hybrid|ultimate) ;;
+    *) printf ''; return 0 ;;
+  esac
+
+  # asusd applies GPU attributes during shutdown/boot. Once the running state
+  # matches the saved request, the marker has done its job.
+  current=$(gpu_mode)
+  if [[ "$requested" == "$current" ]]; then
+    rm -f -- "$gpu_pending_file"
+    return
+  fi
+  printf '%s' "$requested"
+}
+
+write_gpu_pending() {
+  local requested="$1" temporary
+  mkdir -p "$aura_lock_state_dir"
+  temporary=$(mktemp "$aura_lock_state_dir/.gpu-mode.XXXXXX")
+  (umask 077; printf '%s\n' "$requested" > "$temporary")
+  mv -f "$temporary" "$gpu_pending_file"
+}
+
+profile_name() {
+  "$asusctl_bin" profile get 2>/dev/null \
+    | sed -n 's/^Active profile:[[:space:]]*//p' \
+    | head -n1 \
+    || true
+}
+
+adaptive_profile_enabled() {
+  local output ac_profile battery_profile
+  output=$("$asusctl_bin" profile get 2>/dev/null || true)
+  ac_profile=$(printf '%s\n' "$output" | sed -n 's/^AC profile[[:space:]]*//p' | head -n1)
+  battery_profile=$(printf '%s\n' "$output" | sed -n 's/^Battery profile[[:space:]]*//p' | head -n1)
+  [[ "$ac_profile" == "Balanced" && "$battery_profile" == "Quiet" ]] && printf 'true' || printf 'false'
+}
+
+set_fixed_profile() {
+  local profile="$1"
+  # Adaptive is represented by the AC/Battery pair Balanced/Quiet. A fixed
+  # profile must replace both assignments, otherwise the next status refresh
+  # will continue reporting Adaptive even after changing the active profile.
+  "$asusctl_bin" profile set --ac "$profile"
+  "$asusctl_bin" profile set --battery "$profile"
+  "$asusctl_bin" profile set "$profile"
+}
+
+keyboard_level() {
+  local output level
+  output=$("$asusctl_bin" leds get 2>/dev/null || true)
+  level=$(printf '%s\n' "$output" | sed -n 's/.*brightness:[[:space:]]*//Ip' | tail -n1)
+  if [[ -n "$level" ]]; then
+    printf '%s' "$level"
+  else
+    printf '%s\n' "$output" | tail -n1 | sed -n 's/.*:[[:space:]]*//p' | sed 's/[[:space:]]*$//'
+  fi
+}
+
+aura_config() {
+  local path
+  for path in /etc/asusd/aura_*.ron; do
+    if [[ -r "$path" ]]; then
+      printf '%s' "$path"
+      return
+    fi
+  done
+  printf '?'
+}
+
+aura_mode_name() {
+  local config mode
+  config=$(aura_config)
+  [[ -r "$config" ]] || { printf 'static'; return; }
+  mode=$(sed -n 's/.*current_mode:[[:space:]]*\([A-Za-z0-9_]*\),.*/\1/p' "$config" | head -n1)
+  case "$mode" in
+    Static) printf 'static' ;;
+    Breathe) printf 'breathe' ;;
+    RainbowCycle) printf 'rainbow-cycle' ;;
+    RainbowWave) printf 'rainbow-wave' ;;
+    Pulse) printf 'pulse' ;;
+    *) printf 'static' ;;
+  esac
+}
+
+aura_color() {
+  local config mode block r g b
+  config=$(aura_config)
+  [[ -r "$config" ]] || { printf 'ff2244'; return; }
+  mode=$(sed -n 's/.*current_mode:[[:space:]]*\([A-Za-z0-9_]*\),.*/\1/p' "$config" | head -n1)
+  [[ -n "$mode" ]] || { printf 'ff2244'; return; }
+  block=$(awk -v mode="$mode" '
+    $0 ~ "^[[:space:]]*" mode ":[[:space:]]*\\(" { inside=1; next }
+    inside && /colour1:[[:space:]]*\(/ { colour=1; next }
+    colour && /colour2:[[:space:]]*\(/ { exit }
+    colour { print }
+  ' "$config")
+  r=$(printf '%s\n' "$block" | sed -n 's/.*r:[[:space:]]*\([0-9][0-9]*\),.*/\1/p' | head -n1)
+  g=$(printf '%s\n' "$block" | sed -n 's/.*g:[[:space:]]*\([0-9][0-9]*\),.*/\1/p' | head -n1)
+  b=$(printf '%s\n' "$block" | sed -n 's/.*b:[[:space:]]*\([0-9][0-9]*\),.*/\1/p' | head -n1)
+  if [[ "$r" =~ ^[0-9]+$ && "$g" =~ ^[0-9]+$ && "$b" =~ ^[0-9]+$ ]] \
+    && ((r <= 255 && g <= 255 && b <= 255)); then
+    printf '%02x%02x%02x' "$r" "$g" "$b"
+  else
+    printf 'ff2244'
+  fi
+}
+
+aura_lock_values() {
+  local mode colour
+  [[ -r "$aura_lock_file" ]] || return 1
+  mode=$(sed -n 's/^mode=//p' "$aura_lock_file" | head -n1)
+  colour=$(sed -n 's/^colour=//p' "$aura_lock_file" | head -n1)
+  [[ "$mode" =~ ^(static|breathe|rainbow-cycle|rainbow-wave|pulse)$ ]] || return 1
+  [[ "$colour" =~ ^[0-9A-Fa-f]{6}$ ]] || return 1
+  printf '%s %s\n' "$mode" "${colour,,}"
+}
+
+aura_lock_enabled() {
+  aura_lock_values >/dev/null
+}
+
+write_aura_lock() {
+  local mode="${1:-}" colour="${2:-}"
+  [[ "$mode" =~ ^(static|breathe|rainbow-cycle|rainbow-wave|pulse)$ ]] || die "unsupported Aura mode for color lock"
+  [[ "$colour" =~ ^[0-9A-Fa-f]{6}$ ]] || die "invalid Aura color for color lock"
+  mkdir -p "$aura_lock_state_dir"
+  (umask 077; printf 'mode=%s\ncolour=%s\n' "$mode" "${colour,,}" > "$aura_lock_file")
+}
+
+install_aura_lock_hook() {
+  [[ -x "$aura_lock_hook_template" ]] || die "keyboard-color lock hook is unavailable"
+  install -Dm700 "$aura_lock_hook_template" "$aura_lock_hook"
+}
+
+apply_aura_effect() {
+  local mode="${1:-}" colour="${2:-}"
+  case "$mode" in
+    static) "$asusctl_bin" aura effect static --colour "$colour" ;;
+    breathe) "$asusctl_bin" aura effect breathe --colour "$colour" --colour2 000000 --speed med ;;
+    rainbow-cycle) "$asusctl_bin" aura effect rainbow-cycle --speed med ;;
+    rainbow-wave) "$asusctl_bin" aura effect rainbow-wave --direction right --speed med ;;
+    pulse) "$asusctl_bin" aura effect pulse --colour "$colour" ;;
+    *) die "aura mode must be static, breathe, rainbow-cycle, rainbow-wave, or pulse" ;;
+  esac
+}
+
+set_aura_lock() {
+  local action="${1:-}" mode colour
+  case "$action" in
+    on)
+      mode=$(aura_mode_name)
+      colour=$(aura_color)
+      write_aura_lock "$mode" "$colour"
+      install_aura_lock_hook
+      notify "Keyboard color lock: on"
+      ;;
+    off)
+      rm -f -- "$aura_lock_file" "$aura_lock_hook"
+      notify "Keyboard color lock: off"
+      ;;
+    apply)
+      read -r mode colour < <(aura_lock_values) || return 0
+      apply_aura_effect "$mode" "$colour"
+      ;;
+    *) die "aura-lock must be on, off, or apply" ;;
+  esac
+}
+
+slash_mode_name() {
+  local mode
+  mode=$(sed -n 's/.*display_mode:[[:space:]]*\([A-Za-z0-9_]*\),.*/\1/p' /etc/asusd/slash.ron 2>/dev/null | head -n1)
+  printf '%s' "${mode:-Bounce}"
+}
+
+slash_brightness() {
+  local brightness
+  brightness=$(sed -n 's/.*brightness:[[:space:]]*\([0-9][0-9]*\),.*/\1/p' /etc/asusd/slash.ron 2>/dev/null | head -n1)
+  printf '%s' "${brightness:-255}"
+}
+
+slash_enabled() {
+  local enabled
+  enabled=$(sed -n 's/.*enabled:[[:space:]]*\(true\|false\),.*/\1/p' /etc/asusd/slash.ron 2>/dev/null | head -n1)
+  printf '%s' "${enabled:-unknown}"
+}
+
+dgpu_slot() {
+  local device class boot vendor
+  for device in /sys/bus/pci/devices/*; do
+    [[ -r "$device/class" ]] || continue
+    class=$(tr -d '[:space:]' < "$device/class")
+    [[ "$class" == 0x03* ]] || continue
+    boot=$(read_value "$device/boot_vga")
+    if [[ "$boot" == 0 ]]; then
+      basename "$device"
+      return
+    fi
+  done
+
+  # ASUS ROG laptops with an NVIDIA dGPU retain the PCI function even when
+  # it is runtime-suspended, so prefer it as a useful fallback.
+  for device in /sys/bus/pci/devices/*; do
+    [[ -r "$device/vendor" && -r "$device/class" ]] || continue
+    vendor=$(tr -d '[:space:]' < "$device/vendor")
+    class=$(tr -d '[:space:]' < "$device/class")
+    if [[ "$vendor" == 0x10de && "$class" == 0x03* ]]; then
+      basename "$device"
+      return
+    fi
+  done
+}
+
+vulkan_gpu_name() {
+  local wanted="$1" vulkaninfo_bin name
+  vulkaninfo_bin="${VULKANINFO_BIN:-$(command -v vulkaninfo || true)}"
+  [[ -x "$vulkaninfo_bin" ]] || return 1
+
+  name=$("$vulkaninfo_bin" --summary 2>/dev/null | awk -v wanted="$wanted" '
+    function emit() {
+      if (!found && type == wanted && name != "") {
+        print name
+        found = 1
+        exit
+      }
+    }
+    /^GPU[0-9]+:$/ {
+      if (seen) emit()
+      seen = 1
+      type = ""
+      name = ""
+      next
+    }
+    seen && /^[[:space:]]*deviceType[[:space:]]*=/ {
+      type = $0
+      sub(/^[^=]*=[[:space:]]*/, "", type)
+      next
+    }
+    seen && /^[[:space:]]*deviceName[[:space:]]*=/ {
+      name = $0
+      sub(/^[^=]*=[[:space:]]*/, "", name)
+      next
+    }
+    END { if (seen && !found) emit() }
+  ' || true)
+  [[ -n "$name" ]] || return 1
+  printf '%s' "$name" | sed -E 's/[[:space:]]+\((RADV|ANV|LLVM|Mesa)[^)]*\)$//'
+}
+
+gpu_name_for_slot() {
+  local slot="$1" name
+  [[ -n "$slot" ]] || return 1
+  command -v lspci >/dev/null 2>&1 || return 1
+  name=$(lspci -Dmmnn -s "$slot" 2>/dev/null | awk -F '"' '
+    /"VGA compatible controller|3D controller|Display controller/ {
+      model = $6
+      sub(/[[:space:]]+\[[[:xdigit:]]+\]$/, "", model)
+      if (match(model, /\[[^]]+\]/))
+        print substr(model, RSTART + 1, RLENGTH - 2)
+      else {
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", model)
+        print model
+      }
+      exit
+    }
+  ')
+  [[ -n "$name" ]] || return 1
+  printf '%s' "$name"
+}
+
+short_gpu_name() {
+  printf '%s' "$*" | sed -E \
+    -e 's/^Advanced Micro Devices, Inc\. \[AMD\/ATI\][[:space:]]*//' \
+    -e 's/^Advanced Micro Devices, Inc\.[[:space:]]*//' \
+    -e 's/^AMD\/ATI[[:space:]]*//' \
+    -e 's/^AMD[[:space:]]+//' \
+    -e 's/^NVIDIA Corporation[[:space:]]*//' \
+    -e 's/^NVIDIA[[:space:]]+//' \
+    -e 's/^GeForce[[:space:]]+//' \
+    -e 's/^Intel\(R\)\?[[:space:]]*//' \
+    -e 's/[[:space:]]+Laptop GPU$/ Mobile/' \
+    -e 's/[[:space:]]+Graphics$//' \
+    -e 's/[[:space:]]+/ /g' \
+    -e 's/^ //' \
+    -e 's/ $//'
+}
+
+dgpu_name() {
+  local slot name
+  name=$(vulkan_gpu_name PHYSICAL_DEVICE_TYPE_DISCRETE_GPU || true)
+  if [[ -n "$name" ]]; then
+    printf '%s' "$name"
+    return
+  fi
+  slot=$(dgpu_slot || true)
+  name=$(gpu_name_for_slot "$slot" || true)
+  printf '%s' "${name:-Discrete GPU}"
+}
+
+igpu_slot() {
+  local dgpu device class boot vendor
+  dgpu=$(dgpu_slot || true)
+
+  # The integrated adapter is normally the boot VGA device. Do not select
+  # the dGPU even when firmware leaves boot_vga unset on the iGPU.
+  for device in /sys/bus/pci/devices/*; do
+    [[ -r "$device/class" ]] || continue
+    class=$(tr -d '[:space:]' < "$device/class")
+    [[ "$class" == 0x03* ]] || continue
+    [[ "$(basename "$device")" != "$dgpu" ]] || continue
+    boot=$(read_value "$device/boot_vga")
+    if [[ "$boot" == 1 ]]; then
+      basename "$device"
+      return
+    fi
+  done
+
+  # Some ASUS AMD iGPUs do not expose boot_vga. Prefer a non-NVIDIA graphics
+  # adapter, which is the integrated Radeon on supported G14 configurations.
+  for device in /sys/bus/pci/devices/*; do
+    [[ -r "$device/vendor" && -r "$device/class" ]] || continue
+    class=$(tr -d '[:space:]' < "$device/class")
+    vendor=$(tr -d '[:space:]' < "$device/vendor")
+    [[ "$class" == 0x03* && "$vendor" != 0x10de ]] || continue
+    [[ "$(basename "$device")" != "$dgpu" ]] || continue
+    basename "$device"
+    return
+  done
+}
+
+igpu_name() {
+  local slot name
+  name=$(vulkan_gpu_name PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU || true)
+  if [[ -n "$name" ]]; then
+    printf '%s' "$name"
+    return
+  fi
+  slot=$(igpu_slot || true)
+  name=$(gpu_name_for_slot "$slot" || true)
+  printf '%s' "${name:-Integrated GPU}"
+}
+
+gpu_name_for_mode() {
+  local mode="$1" integrated discrete
+  case "$mode" in
+    integrated)
+      igpu_name
+      ;;
+    ultimate)
+      dgpu_name
+      ;;
+    hybrid)
+      integrated=$(igpu_name)
+      discrete=$(dgpu_name)
+      if [[ "$integrated" == "Integrated GPU" ]]; then
+        printf '%s' "$discrete"
+      elif [[ "$discrete" == "Discrete GPU" ]]; then
+        printf '%s' "$integrated"
+      else
+        printf '%s + %s' "$integrated" "$discrete"
+      fi
+      ;;
+    *)
+      printf 'GPU'
+      ;;
+  esac
+}
+
+dgpu_runtime() {
+  local slot
+  slot=$(dgpu_slot || true)
+  [[ -n "$slot" ]] || { printf 'unknown'; return; }
+  read_value "/sys/bus/pci/devices/$slot/power/runtime_status"
+}
+
+status_json() {
+  local profile adaptive mode pending target disabled mux runtime dgpu_raw igpu_raw dgpu igpu gpu keyboard aura colour aura_locked slash brightness enabled
+  profile=$(profile_name)
+  adaptive=$(adaptive_profile_enabled)
+  mode=$(gpu_mode)
+  pending=$(gpu_pending_mode)
+  target="${pending:-$mode}"
+  disabled=$(sysfs_value dgpu_disable)
+  mux=$(sysfs_value gpu_mux_mode)
+  runtime=$(dgpu_runtime)
+  dgpu_raw=$(dgpu_name)
+  igpu_raw=$(igpu_name)
+  dgpu=$(short_gpu_name "$dgpu_raw")
+  igpu=$(short_gpu_name "$igpu_raw")
+  case "$target" in
+    integrated) gpu="$igpu" ;;
+    ultimate) gpu="$dgpu" ;;
+    hybrid)
+      if [[ "$igpu" == "Integrated GPU" ]]; then
+        gpu="$dgpu"
+      elif [[ "$dgpu" == "Discrete GPU" ]]; then
+        gpu="$igpu"
+      else
+        gpu="$igpu + $dgpu"
+      fi
+      ;;
+    *) gpu="GPU" ;;
+  esac
+  keyboard=$(keyboard_level)
+  aura=$(aura_mode_name)
+  colour=$(aura_color)
+  aura_locked=$(aura_lock_enabled && printf 'true' || printf 'false')
+  slash=$(slash_mode_name)
+  brightness=$(slash_brightness)
+  enabled=$(slash_enabled)
+  jq -cn \
+    --arg profile "$profile" \
+    --argjson adaptive "$adaptive" \
+    --arg mode "$mode" \
+    --arg gpu_pending "$pending" \
+    --arg gpu_target "$target" \
+    --arg disabled "$disabled" \
+    --arg mux "$mux" \
+    --arg runtime "$runtime" \
+    --arg dgpu "$dgpu" \
+    --arg igpu "$igpu" \
+    --arg gpu "$gpu" \
+    --arg keyboard "$keyboard" \
+    --arg aura_mode "$aura" \
+    --arg aura_color "$colour" \
+    --argjson aura_locked "$aura_locked" \
+    --arg slash_mode "$slash" \
+    --arg slash_brightness "$brightness" \
+    --arg slash_enabled "$enabled" \
+    '{profile:$profile,adaptive:$adaptive,gpu_mode:$mode,gpu_pending:$gpu_pending,gpu_target_mode:$gpu_target,gpu_name:$gpu,igpu_name:$igpu,dgpu_name:$dgpu,dgpu_disable:$disabled,gpu_mux_mode:$mux,dgpu_runtime:$runtime,nvidia_runtime:$runtime,keyboard_brightness:$keyboard,aura_mode:$aura_mode,aura_color:$aura_color,aura_locked:$aura_locked,slash_mode:$slash_mode,slash_brightness:$slash_brightness,slash_enabled:$slash_enabled}'
+}
+
+set_profile() {
+  local profile="${1:-}" applied_profile=""
+  case "$profile" in
+    quiet|Quiet) profile="Quiet" ;;
+    balanced|Balanced) profile="Balanced" ;;
+    performance|Performance) profile="Performance" ;;
+    next|cycle)
+      "$asusctl_bin" profile next
+      applied_profile=$(profile_name)
+      [[ "$applied_profile" =~ ^(Quiet|Balanced|Performance)$ ]] \
+        && set_fixed_profile "$applied_profile"
+      applied_profile=$(profile_name)
+      refresh_profile_widget "$applied_profile"
+      notify_profile "Profile: $applied_profile"
+      return
+      ;;
+    adaptive)
+      "$asusctl_bin" profile set --ac Balanced
+      "$asusctl_bin" profile set --battery Quiet
+      refresh_profile_widget "$(profile_name)"
+      notify_profile "Adaptive profiles: AC Balanced / battery Quiet"
+      return
+      ;;
+    *) die "profile must be quiet, balanced, performance, next, or adaptive" ;;
+  esac
+  set_fixed_profile "$profile"
+  refresh_profile_widget "$profile"
+  notify_profile "Profile: $profile"
+}
+
+set_graphics() {
+  local requested="${1:-}" disabled mux
+  case "$requested" in
+    integrated) disabled=1; mux=1 ;;
+    hybrid) disabled=0; mux=1 ;;
+    ultimate|discrete) disabled=0; mux=0; requested=ultimate ;;
+    *) die "graphics must be integrated, hybrid, or ultimate" ;;
+  esac
+  # asusd deliberately queues these GPU attributes and applies them on the
+  # next shutdown/boot. Do not reject a request just because NVIDIA is busy;
+  # the active session remains untouched until that reboot.
+  "$asusctl_bin" armoury set dgpu_disable "$disabled"
+  "$asusctl_bin" armoury set gpu_mux_mode "$mux"
+  write_gpu_pending "$requested"
+  notify "GPU mode scheduled: $requested (reboot required)"
+}
+
+set_keyboard() {
+  case "${1:-}" in
+    off|low|med|high) "$asusctl_bin" leds set "$1" ;;
+    up|cycle) "$asusctl_bin" leds next ;;
+    down) "$asusctl_bin" leds prev ;;
+    *) die "keyboard level must be off, low, med, high, up, down, or cycle" ;;
+  esac
+  notify "Keyboard backlight: $(keyboard_level)"
+}
+
+set_aura_mode() {
+  local mode="${1:-}" colour="${2:-ff2244}"
+  [[ "$colour" =~ ^[0-9A-Fa-f]{6}$ ]] || die "aura color must be a 6-digit RGB value, e.g. 33ccff"
+  apply_aura_effect "$mode" "$colour"
+  aura_lock_enabled && write_aura_lock "$mode" "$colour" || true
+  notify "Keyboard Aura: $mode"
+}
+
+set_slash_mode() {
+  local requested="${1:-}" mode
+  case "$requested" in
+    static|Static) mode=Static ;;
+    bounce|Bounce) mode=Bounce ;;
+    slash|Slash) mode=Slash ;;
+    loading|Loading) mode=Loading ;;
+    bitstream|BitStream) mode=BitStream ;;
+    transmission|Transmission) mode=Transmission ;;
+    flow|Flow) mode=Flow ;;
+    flux|Flux) mode=Flux ;;
+    phantom|Phantom) mode=Phantom ;;
+    spectrum|Spectrum) mode=Spectrum ;;
+    hazard|Hazard) mode=Hazard ;;
+    interfacing|Interfacing) mode=Interfacing ;;
+    ramp|Ramp) mode=Ramp ;;
+    gameover|GameOver) mode=GameOver ;;
+    start|Start) mode=Start ;;
+    buzzer|Buzzer) mode=Buzzer ;;
+    *) die "unsupported Slash mode: $requested" ;;
+  esac
+  "$asusctl_bin" slash --mode "$mode"
+  notify "Slash mode: $mode"
+}
+
+set_slash_brightness() {
+  local brightness="${1:-}"
+  [[ "$brightness" =~ ^[0-9]+$ && "$brightness" -le 255 ]] || die "Slash brightness must be 0-255"
+  "$asusctl_bin" slash --brightness "$brightness"
+  notify "Slash brightness: $brightness/255"
+}
+
+toggle_airplane() {
+  command -v rfkill >/dev/null 2>&1 || die "rfkill is not installed"
+  local soft_blocked
+  soft_blocked=$(rfkill list 2>/dev/null | awk -F': ' '/Soft blocked:/ {print $2}' | sort -u | head -n1)
+  if [[ "$soft_blocked" == yes ]]; then
+    rfkill unblock all
+    notify "Airplane mode: off"
+  else
+    rfkill block all
+    notify "Airplane mode: on"
+  fi
+}
+
+hotkey_is_valid() {
+  local key="${1:-}"
+  [[ -z "$key" || "$key" =~ ^[[:alnum:]_+[:space:]-]+$ ]]
+}
+
+ask_hotkey() {
+  local label="$1" default_value="$2" reply
+  while true; do
+    printf '%s [%s] (or - to skip): ' "$label" "$default_value" >&2
+    IFS= read -r reply
+    [[ "$reply" == "-" ]] && { printf ''; return; }
+    reply="${reply:-$default_value}"
+    if hotkey_is_valid "$reply"; then
+      printf '%s' "$reply"
+      return
+    fi
+    printf '%s\n' 'Use only key names, spaces, +, - and _ (for example XF86Launch1).' >&2
+  done
+}
+
+hotkeys_guide() {
+  printf '%s\n' \
+    'G14 hotkey setup is optional and only changes a clearly marked block in ~/.config/hypr/bindings.lua.' \
+    '' \
+    '1. In a terminal, run wev and press each physical G14 key once.' \
+    '2. Record the key symbol: common defaults are XF86Launch1 (M4), XF86Launch3 (Aura),' \
+    '   XF86Launch4 / XF86Fn_F5 (profile), and SUPER + SHIFT + S (F6 screenshot).' \
+    '3. Run g14ctl hotkeys setup, use those symbols, review the summary, and confirm.' \
+    '' \
+    'The setup makes a timestamped backup, preserves everything outside its marked block,' \
+    'installs the small g14ctl command wrapper if it is safe to do so, reloads Hyprland,' \
+    'and leaves unrelated bindings untouched. Enter - for any mapping you do not want.' \
+    'Run g14ctl hotkeys remove before uninstalling the plugin.'
+}
+
+hotkeys_capture() {
+  command -v wev >/dev/null 2>&1 || die "wev is required for key capture; install the wev package and try again"
+  printf '%s\n' 'Press one G14 special key at a time and note its key symbol. Close wev when finished.'
+  exec wev
+}
+
+g14ctl_wrapper_is_managed() {
+  [[ -f "$g14ctl_wrapper" ]] && grep -Fq 'ayumad.g14-controls/g14ctl' "$g14ctl_wrapper"
+}
+
+ensure_g14ctl_wrapper() {
+  local temporary_wrapper
+  if [[ -e "$g14ctl_wrapper" ]] && ! g14ctl_wrapper_is_managed; then
+    die "refusing to replace existing $g14ctl_wrapper; use your existing command or remove it first"
+  fi
+
+  mkdir -p "$g14ctl_wrapper_dir"
+  temporary_wrapper=$(mktemp "$g14ctl_wrapper_dir/.g14ctl.XXXXXX")
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
+    'helper="${XDG_CONFIG_HOME:-${HOME}/.config}/omarchy/plugins/ayumad.g14-controls/g14ctl"' \
+    '[[ -x "$helper" ]] || { printf "g14ctl: install ayumad.g14-controls before using this command\\n" >&2; exit 1; }' \
+    'exec "$helper" "$@"' > "$temporary_wrapper"
+  chmod 755 "$temporary_wrapper"
+  mv -f "$temporary_wrapper" "$g14ctl_wrapper"
+}
+
+write_hotkey_block() {
+  local m4_key="$1" aura_key="$2" profile_key="$3" profile_alt_key="$4" screenshot_key="$5"
+  local temporary_bindings backup_path
+  mkdir -p "$hypr_config_dir"
+  [[ ! -e "$hypr_bindings_file" || -f "$hypr_bindings_file" ]] \
+    || die "$hypr_bindings_file is not a regular file"
+
+  if [[ -f "$hypr_bindings_file" ]]; then
+    backup_path="$hypr_bindings_file.g14-controls.$(date +%Y%m%d-%H%M%S).bak"
+    cp -a "$hypr_bindings_file" "$backup_path"
+    printf 'Backup: %s\n' "$backup_path"
+  fi
+
+  temporary_bindings=$(mktemp "$hypr_config_dir/.bindings.lua.g14-controls.XXXXXX")
+  if [[ -f "$hypr_bindings_file" ]]; then
+    awk -v start="$hotkey_block_start" -v end="$hotkey_block_end" '
+      $0 == start { skipping = 1; next }
+      $0 == end { skipping = 0; next }
+      !skipping { print }
+    ' "$hypr_bindings_file" > "$temporary_bindings"
+  fi
+
+  printf '\n%s\n' "$hotkey_block_start" >> "$temporary_bindings"
+  printf '%s\n' '-- Optional ASUS G14 keys. Generated by g14ctl hotkeys setup.' >> "$temporary_bindings"
+  if [[ -n "$m4_key" ]]; then
+    printf 'hl.unbind("%s")\n' "$m4_key" >> "$temporary_bindings"
+    printf 'o.bind("%s", "G14 controls", "omarchy-shell shell toggle ayumad.g14-controls")\n' "$m4_key" >> "$temporary_bindings"
+  fi
+  if [[ -n "$aura_key" ]]; then
+    printf 'hl.unbind("%s")\n' "$aura_key" >> "$temporary_bindings"
+    printf 'o.bind("%s", "Cycle Aura effect", "g14ctl aura-next")\n' "$aura_key" >> "$temporary_bindings"
+  fi
+  if [[ -n "$profile_key" ]]; then
+    printf 'hl.unbind("%s")\n' "$profile_key" >> "$temporary_bindings"
+    printf 'o.bind("%s", "Cycle G14 profile", "g14ctl profile next")\n' "$profile_key" >> "$temporary_bindings"
+  fi
+  if [[ -n "$profile_alt_key" && "$profile_alt_key" != "$profile_key" ]]; then
+    printf 'hl.unbind("%s")\n' "$profile_alt_key" >> "$temporary_bindings"
+    printf 'o.bind("%s", "Cycle G14 profile", "g14ctl profile next")\n' "$profile_alt_key" >> "$temporary_bindings"
+  fi
+  if [[ -n "$screenshot_key" ]]; then
+    printf 'hl.unbind("%s")\n' "$screenshot_key" >> "$temporary_bindings"
+    printf 'o.bind("%s", "Screenshot", "omarchy-capture-screenshot")\n' "$screenshot_key" >> "$temporary_bindings"
+  fi
+  printf '%s\n' "$hotkey_block_end" >> "$temporary_bindings"
+  mv -f "$temporary_bindings" "$hypr_bindings_file"
+}
+
+reload_hyprland() {
+  command -v hyprctl >/dev/null 2>&1 || return
+  hyprctl reload
+  local errors
+  errors=$(hyprctl configerrors 2>&1 || true)
+  if [[ -n "$errors" ]]; then
+    printf 'Hyprland reported configuration errors:\n%s\n' "$errors"
+  else
+    printf '%s\n' 'Hyprland reloaded with no configuration errors.'
+  fi
+}
+
+hotkeys_setup() {
+  local m4_key="XF86Launch1" aura_key="XF86Launch3" profile_key="XF86Launch4"
+  local profile_alt_key="XF86Fn_F5" screenshot_key="SUPER + SHIFT + S" reply
+
+  hotkeys_guide
+  if command -v wev >/dev/null 2>&1; then
+    printf '%s\n' 'Tip: run wev in another terminal now if you need to identify a key.'
+  else
+    printf '%s\n' 'Tip: install wev first if you need to identify your key events.'
+  fi
+
+  printf '\nUse the common G14 defaults shown above? [Y/n] '
+  IFS= read -r reply
+  case "$reply" in
+    ""|y|Y|yes|YES) ;;
+    n|N|no|NO)
+      m4_key=$(ask_hotkey 'M4 / ROG key' "$m4_key")
+      aura_key=$(ask_hotkey 'Aura key' "$aura_key")
+      profile_key=$(ask_hotkey 'Profile key' "$profile_key")
+      profile_alt_key=$(ask_hotkey 'Alternate profile key' "$profile_alt_key")
+      screenshot_key=$(ask_hotkey 'F6 screenshot shortcut' "$screenshot_key")
+      ;;
+    *) printf '%s\n' 'Cancelled — choose Y for defaults or N to configure each key.'; return ;;
+  esac
+
+  if [[ -e "$g14ctl_wrapper" ]] && ! g14ctl_wrapper_is_managed; then
+    die "refusing to replace existing $g14ctl_wrapper; no bindings were changed"
+  fi
+
+  printf '\n%s\n' 'The following bindings will be installed (a single marked block only):'
+  [[ -n "$m4_key" ]] && printf '  M4 / ROG: %s -> G14 controls\n' "$m4_key"
+  [[ -n "$aura_key" ]] && printf '  Aura: %s -> next Aura effect\n' "$aura_key"
+  [[ -n "$profile_key" ]] && printf '  Profile: %s -> next profile\n' "$profile_key"
+  [[ -n "$profile_alt_key" && "$profile_alt_key" != "$profile_key" ]] && printf '  Alternate profile: %s -> next profile\n' "$profile_alt_key"
+  [[ -n "$screenshot_key" ]] && printf '  Screenshot: %s -> screenshot (overrides that key)\n' "$screenshot_key"
+  printf '%s' 'Write this block and reload Hyprland? [y/N] '
+  IFS= read -r reply
+  [[ "$reply" =~ ^[yY]([eE][sS])?$ ]] || { printf '%s\n' 'Cancelled — no files were changed.'; return; }
+
+  ensure_g14ctl_wrapper
+  write_hotkey_block "$m4_key" "$aura_key" "$profile_key" "$profile_alt_key" "$screenshot_key"
+  reload_hyprland
+  printf '%s\n' 'Done. Re-run g14ctl hotkeys setup any time to replace only this managed block.'
+}
+
+hotkeys_remove() {
+  local temporary_bindings backup_path
+  if [[ ! -f "$hypr_bindings_file" ]] || ! grep -Fqx -- "$hotkey_block_start" "$hypr_bindings_file"; then
+    printf '%s\n' 'No managed G14 hotkey block was found.'
+    return
+  fi
+
+  backup_path="$hypr_bindings_file.g14-controls.$(date +%Y%m%d-%H%M%S).bak"
+  cp -a "$hypr_bindings_file" "$backup_path"
+  temporary_bindings=$(mktemp "$hypr_config_dir/.bindings.lua.g14-controls.XXXXXX")
+  awk -v start="$hotkey_block_start" -v end="$hotkey_block_end" '
+    $0 == start { skipping = 1; next }
+    $0 == end { skipping = 0; next }
+    !skipping { print }
+  ' "$hypr_bindings_file" > "$temporary_bindings"
+  mv -f "$temporary_bindings" "$hypr_bindings_file"
+  if g14ctl_wrapper_is_managed; then
+    rm -f -- "$g14ctl_wrapper"
+    printf '%s\n' "Removed managed wrapper: $g14ctl_wrapper"
+  fi
+  printf 'Backup: %s\n' "$backup_path"
+  reload_hyprland
+  printf '%s\n' 'Removed the managed G14 hotkey block.'
+}
+
+open_gui() {
+  command -v rog-control-center >/dev/null 2>&1 || die "rog-control-center is not installed"
+  uwsm-app -- rog-control-center >/dev/null 2>&1 &
+}
+
+case "${1:-status}" in
+  status) status_json ;;
+  profile) set_profile "${2:-}" ;;
+  graphics|gpu) set_graphics "${2:-}" ;;
+  keyboard|leds) set_keyboard "${2:-}" ;;
+  gui|open-gui) open_gui ;;
+  airplane|wireless) toggle_airplane ;;
+  aura-static)
+    [[ "${2:-}" =~ ^[0-9A-Fa-f]{6}$ ]] || die "aura-static requires a 6-digit RGB value, e.g. 33ccff"
+    set_aura_mode static "$2"
+    ;;
+  aura-mode)
+    set_aura_mode "${2:-}" "${3:-ff2244}"
+    ;;
+  aura-next)
+    "$asusctl_bin" aura effect --next-mode >/dev/null 2>&1
+    aura_lock_enabled && write_aura_lock "$(aura_mode_name)" "$(aura_color)" || true
+    notify "Keyboard Aura: next effect"
+    ;;
+  aura-lock)
+    set_aura_lock "${2:-}"
+    ;;
+  hotkeys)
+    case "${2:-guide}" in
+      guide) hotkeys_guide ;;
+      capture) hotkeys_capture ;;
+      setup) hotkeys_setup ;;
+      remove) hotkeys_remove ;;
+      *) die "hotkeys must be guide, capture, setup, or remove" ;;
+    esac
+    ;;
+  slash)
+    case "${2:-}" in
+      on) "$asusctl_bin" slash --enable ;;
+      off) "$asusctl_bin" slash --disable ;;
+      *) die "slash must be on or off" ;;
+    esac
+    ;;
+  slash-mode)
+    set_slash_mode "${2:-}"
+    ;;
+  slash-brightness)
+    set_slash_brightness "${2:-}"
+    ;;
+  *)
+    printf '%s\n' 'Usage: g14ctl {status|gui|profile {adaptive|quiet|balanced|performance|next}|graphics {integrated|hybrid|ultimate}|keyboard {off|low|med|high|up|down|cycle}|aura-static RRGGBB|aura-mode MODE [RRGGBB]|aura-next|aura-lock {on|off|apply}|airplane|hotkeys {guide|capture|setup|remove}|slash {on|off}|slash-mode MODE|slash-brightness 0-255}' >&2
+    exit 2
+    ;;
+esac

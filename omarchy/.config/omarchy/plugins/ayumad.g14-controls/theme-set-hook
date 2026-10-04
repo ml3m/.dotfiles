@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Installed only when the user enables keyboard-color lock in G14 Controls.
+# Theme hooks receive the new theme slug as $1; the saved Aura state is global.
+helper="${XDG_CONFIG_HOME:-${HOME}/.config}/omarchy/plugins/ayumad.g14-controls/g14ctl"
+[[ -x "$helper" ]] || exit 0
+exec "$helper" aura-lock apply

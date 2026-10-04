@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "id": "quickshell.spotify",
+  "name": "Omarchy Spotify",
+  "version": "1.0.3",
+  "author": "QuickshellSpotify",
+  "license": "MIT",
+  "description": "Spotify in Quickshell with all the features you need—using about 60 MB of memory versus roughly 950 MB for the official client.",
+  "kinds": [
+    "service",
+    "bar-widget",
+    "panel"
+  ],
+  "activation": "on-demand",
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml",
+    "panel": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Omarchy Spotify",
+    "description": "Spotify in Quickshell with all the features you need—using about 60 MB of memory versus roughly 950 MB for the official client.",
+    "category": "Media",
+    "aliases": [
+      "spotify",
+      "music",
+      "player"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "left",
+    "defaults": {
+      "deviceName": "Omarchy Spotify",
+      "idleShutdownMinutes": 15,
+      "showMiniPlayer": "On",
+      "shortcutPlayer": "Omarchy Music app",
+      "shortcutHints": "On",
+      "showTrackTitle": "On",
+      "showArtistName": "Off",
+      "scrollBarText": "Off",
+      "scrollSpeed": "1",
+      "maxBarTextWidth": "240",
+      "audioQuality": "320 kbps"
+    },
+    "schema": [
+      {
+        "key": "deviceName",
+        "type": "string",
+        "label": "This computer appears as",
+        "defaultValue": "Omarchy Spotify",
+        "description": "Shown in Devices immediately. Spotify Connect uses the new name the next time local playback starts."
+      },
+      {
+        "key": "idleShutdownMinutes",
+        "type": "integer",
+        "label": "Stop local playback when idle",
+        "min": 0,
+        "max": 1440,
+        "step": 5,
+        "defaultValue": 15,
+        "description": "Minutes after the player closes. Use 0 to keep this computer available even while the player is closed."
+      },
+      {
+        "key": "showMiniPlayer",
+        "type": "enum",
+        "label": "Open mini-player from bar",
+        "options": [
+          "On",
+          "Off"
+        ],
+        "defaultValue": "On",
+        "description": "When off, clicking the Spotify bar icon opens the full player directly."
+      },
+      {
+        "key": "shortcutPlayer",
+        "type": "enum",
+        "label": "Keyboard shortcut opens",
+        "options": [
+          "Omarchy Music app",
+          "Full player",
+          "Mini player"
+        ],
+        "defaultValue": "Omarchy Music app",
+        "description": "Choose whether Super+Shift+M launches Omarchy's Music app, the full player, or the mini-player."
+      },
+      {
+        "key": "shortcutHints",
+        "type": "enum",
+        "label": "Shortcut hints",
+        "options": [
+          "On",
+          "Off"
+        ],
+        "defaultValue": "On",
+        "description": "After the first shortcut, matching controls show the next key to press. Shortcuts still work when this is off."
+      },
+      {
+        "key": "showTrackTitle",
+        "type": "enum",
+        "label": "Show track title in bar",
+        "options": [
+          "On",
+          "Off"
+        ],
+        "defaultValue": "On",
+        "description": "Shown only while music is playing. The bar returns to the Spotify icon when paused."
+      },
+      {
+        "key": "showArtistName",
+        "type": "enum",
+        "label": "Show artist name in bar",
+        "options": [
+          "On",
+          "Off"
+        ],
+        "defaultValue": "Off",
+        "description": "Shown only while music is playing. The bar returns to the Spotify icon when paused."
+      },
+      {
+        "key": "scrollBarText",
+        "type": "enum",
+        "label": "Scroll long bar text",
+        "options": [
+          "On",
+          "Off"
+        ],
+        "defaultValue": "Off"
+      },
+      {
+        "key": "scrollSpeed",
+        "type": "string",
+        "label": "Bar text scroll speed",
+        "defaultValue": "1",
+        "description": "Multiplier from 0.25 to 3.00. The default speed is 1."
+      },
+      {
+        "key": "maxBarTextWidth",
+        "type": "string",
+        "label": "Maximum bar text width",
+        "defaultValue": "240",
+        "description": "Width from 160 to 560 px. Use 0 for unlimited."
+      },
+      {
+        "key": "audioQuality",
+        "type": "enum",
+        "label": "Local playback quality",
+        "options": [
+          "96 kbps",
+          "160 kbps",
+          "320 kbps"
+        ],
+        "defaultValue": "320 kbps",
+        "description": "Takes effect the next time playback starts."
+      }
+    ]
+  }
+}

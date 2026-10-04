@@ -1,0 +1,54 @@
+/* One Piece Theme - GTK3 CSS Variables */
+
+@define-color accent_bg_color #c8472c;
+@define-color accent_fg_color #fefefe;
+@define-color accent_color #c8472c;
+
+@define-color window_bg_color #fefefe;
+@define-color window_fg_color #412a1e;
+
+@define-color view_bg_color #fefefe;
+@define-color view_fg_color #412a1e;
+@define-color sidebar_bg_color #f8de3c;
+@define-color sidebar_fg_color #412a1e;
+@define-color sidebar_backdrop_color #f8de3c;
+@define-color sidebar_shade_color #e8cd35;
+
+@define-color headerbar_bg_color #c8472c;
+@define-color headerbar_fg_color #fefefe;
+@define-color headerbar_backdrop_color #c8472c;
+@define-color headerbar_shade_color #b83f26;
+@define-color card_bg_color #fefefe;
+@define-color card_fg_color #412a1e;
+
+@define-color popover_bg_color #fefefe;
+@define-color popover_fg_color #412a1e;
+
+@define-color dialog_bg_color #fefefe;
+@define-color dialog_fg_color #412a1e;
+
+@define-color borders alpha(#412a1e, 0.15);
+
+@define-color theme_fg_color #412a1e;
+@define-color theme_text_color #412a1e;
+@define-color theme_bg_color #fefefe;
+@define-color theme_base_color #fefefe;
+@define-color theme_selected_bg_color #c8472c;
+@define-color theme_selected_fg_color #fefefe;
+@define-color insensitive_bg_color #fefefe;
+@define-color insensitive_fg_color #a08060;
+@define-color insensitive_base_color #fefefe;
+@define-color theme_unfocused_fg_color #412a1e;
+@define-color theme_unfocused_text_color #412a1e;
+@define-color theme_unfocused_bg_color #fefefe;
+@define-color theme_unfocused_base_color #fefefe;
+@define-color theme_unfocused_selected_bg_color #c8472c;
+@define-color theme_unfocused_selected_fg_color #fefefe;
+@define-color unfocused_insensitive_color #a08060;
+@define-color unfocused_borders alpha(#412a1e, 0.15);
+@define-color warning_color #f8de3c;
+@define-color error_color #c8472c;
+@define-color success_color #58acf4;
+@define-color destructive_color #c8472c;
+@define-color content_view_bg #fefefe;
+@define-color text_view_bg #fefefe;

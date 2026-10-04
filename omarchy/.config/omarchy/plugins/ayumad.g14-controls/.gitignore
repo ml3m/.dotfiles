@@ -1,0 +1,4 @@
+.DS_Store
+*.swp
+*.qmlc
+__pycache__/

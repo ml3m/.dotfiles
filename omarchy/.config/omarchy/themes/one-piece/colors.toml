@@ -1,0 +1,34 @@
+# One Piece Theme Colors - Red, Gold & Blue
+accent = "#c8472c"
+active_border_color = "#e8735a"
+active_tab_background = "#f8de3c"
+
+# Cursor colors
+cursor = "#c8472c"
+
+# Primary colors - Light backgrounds with dark text for readability
+foreground = "#412a1e"
+background = "#fefefe"
+
+selection_foreground = "#fefefe"
+selection_background = "#c8472c"
+
+# Normal colors (ANSI 0-7) - One Piece palette
+color0 = "#0b3075"
+color1 = "#c8472c"
+color2 = "#58acf4"
+color3 = "#f8de3c"
+color4 = "#105edd"
+color5 = "#412a1e"
+color6 = "#58acf4"
+color7 = "#412a1e"
+
+# Bright colors (ANSI 8-15) - Use dark for text visibility
+color8 = "#0b3075"
+color9 = "#e8735a"
+color10 = "#58acf4"
+color11 = "#f8de3c"
+color12 = "#105edd"
+color13 = "#c8472c"
+color14 = "#58acf4"
+color15 = "#412a1e"

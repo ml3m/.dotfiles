@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+set -u
+export LC_ALL=C
+
+total_kib=$(awk '$1 == "MemTotal:" { print $2; exit }' /proc/meminfo)
+[[ $total_kib =~ ^[0-9]+$ ]] || total_kib=0
+
+ps -eo pid=,rss=,comm= 2>/dev/null |
+  awk -v total_kib="$total_kib" '
+    {
+      pid = $1
+      rss = $2
+      $1 = ""
+      $2 = ""
+      sub(/^[[:space:]]+/, "")
+      name = $0
+      gsub(/\t/, " ", name)
+
+      if (pid !~ /^[0-9]+$/ || rss !~ /^[0-9]+$/ || rss <= 0 || name == "") next
+      rss_by_name[name] += rss
+      count_by_name[name]++
+      if (!(name in representative_pid) || rss > largest_rss[name]) {
+        representative_pid[name] = pid
+        largest_rss[name] = rss
+      }
+    }
+
+    END {
+      for (name in rss_by_name) {
+        percent = total_kib > 0 ? rss_by_name[name] * 100 / total_kib : 0
+        printf "%s\t%s\t%.0f\t%d\t%.3f\n", representative_pid[name], name, rss_by_name[name] * 1024, count_by_name[name], percent
+      }
+    }
+  ' |
+  sort -t $'\t' -k3,3nr -k2,2 |
+  head -n 32 |
+  jq -Rn '[inputs | split("\t") | {
+    pid: (.[0] | tonumber),
+    name: .[1],
+    rssBytes: (.[2] | tonumber),
+    processCount: (.[3] | tonumber),
+    percent: (.[4] | tonumber)
+  }]'

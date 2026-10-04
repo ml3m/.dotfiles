@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=one-piece
+Comment=One Piece Theme - Red, Gold & Blue
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=one-piece
+MetacityTheme=one-piece
+IconTheme=Yaru-magenta
+CursorTheme=Yaru-magenta
+CursorSize=24

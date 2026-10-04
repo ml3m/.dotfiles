@@ -1,0 +1,172 @@
+/* One Piece Waybar Theme - Red, Gold & Blue */
+
+@import "../omarchy/current/theme/waybar.css";
+
+/* --- Global-Settings ---*/
+* {
+    font-family: "JetBrainsMono Nerd Font";
+    font-size: 12px;
+    font-weight: bold;
+    min-height: 0px;
+}
+
+/* --- Waybar ---*/
+window#waybar {
+    background-color: transparent;
+    transition-property: background-color;
+    transition-duration: 0.5s;
+}
+
+window#waybar.empty #window {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    color: transparent;
+    padding: 0;
+    margin: 0;
+}
+
+#waybar.empty .modules-center {
+    opacity: 0;
+}
+
+/* --- Custom Modules ---*/
+.modules-center {
+    border-radius: 999px;
+    padding: 4px 6px;
+    background-color: alpha(@background, 0.95);
+    box-shadow: 0 2px 4px alpha(#000000, 0.4);
+    border: 1px solid alpha(@foreground, 0.3);
+}
+
+/* --- Tooltip ---*/
+tooltip {
+    padding: 6px;
+    background-color: alpha(@background, 1);
+    border: 1.5px solid alpha(@foreground, 0.8);
+    border-radius: 12px;
+    font-size: 12px;
+}
+
+tooltip label {
+    color: @foreground;
+    font-weight: normal;
+}
+
+/* --- Workspaces --- */
+#workspaces {
+    border-radius: 0;
+    margin: 0 3px;
+}
+
+#workspaces button {
+    padding: 0px 10px;
+    margin: 0 2px 0 0;
+    border-radius: 0;
+    background-color: transparent;
+    color: @foreground;
+    box-shadow: none;
+}
+
+#workspaces button.active {
+    background-color: @foreground;
+    color: @background;
+    border-radius: 999px;
+}
+
+#workspaces button:hover {
+    background-color: alpha(@foreground, 0.4);
+    color: @background;
+    border-radius: 999px;
+}
+
+/* --- General Modules --- */
+#tray,
+#tray-expander,
+#window,
+#mpris,
+#cpu,
+#battery,
+#network,
+#memory,
+#backlight,
+#bluetooth,
+#custom-update,
+#custom-voxtype,
+#custom-voxtype.recording,
+#custom-voxtype.transcribing,
+#custom-screenrecording-indicator,
+#custom-updatespacman,
+#custom-power,
+#idle_inhibitor,
+#custom-sysinfo {
+    min-width: 18px;
+    margin: 0 2px;
+    padding: 0px 12px;
+    border-radius: 0;
+    box-shadow: none;
+    background-color: transparent;
+    color: @foreground;
+}
+#custom-voxtype {
+    background-color: transparent;
+    min-width: 12px;
+    margin: 0 0 0 0;
+}
+
+#custom-voxtype.recording {
+    background-color: transparent;
+    color: @foreground;
+}
+
+/* --- Hover --- */
+
+#cpu:hover,
+#memory:hover,
+#window:hover,
+#mpris:hover,
+#battery:hover,
+#bluetooth:hover,
+#backlight:hover,
+#custom-update:hover,
+#custom-updatespacman:hover,
+#network:hover,
+#custom-power:hover,
+#idle_inhibitor:hover,
+#tray:hover,
+#custom-screenrecording-indicator:hover,
+#custom-expand-icon:hover,
+#custom-sysinfo:hover {
+    border-radius: 999px;
+    background-color: alpha(@foreground, 0.2);
+    color: @foreground;
+    opacity: 1;
+}
+
+/* --- Battery states --- */
+#battery.warning {
+    color: @foreground;
+}
+
+#battery.critical:not(.charging) {
+    animation: blink2 0.5s steps(12) infinite alternate;
+}
+
+/* --- Animations unchanged --- */
+@keyframes blink {
+    to {
+        color: #4a4a4a;
+    }
+}
+
+@keyframes blink2 {
+    to {
+        background-color: alpha(@background, 0.85);
+        color: @foreground;
+    }
+}
+
+#custom-idle-indicator.active,
+#custom-notification-silencing-indicator.active {
+    color: #a55555;
+}

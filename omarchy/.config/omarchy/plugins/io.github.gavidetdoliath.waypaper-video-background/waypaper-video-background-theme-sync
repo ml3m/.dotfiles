@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+
+# Managed by Waypaper Video. Installed into Omarchy's theme-set.d hook.
+set -euo pipefail
+
+readonly config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+readonly state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+readonly waypaper_config="$config_home/waypaper/config.ini"
+readonly current_background="$state_home/omarchy/current/background"
+
+fail() {
+  local exit_code="$1"
+  shift
+  printf 'waypaper-video-theme-sync: %s\n' "$*" >&2
+  exit "$exit_code"
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || fail 69 "required command is not installed: $1"
+}
+
+ini_value() {
+  local wanted="$1"
+  awk -v wanted="$wanted" '
+    /^\[Settings\][[:space:]]*$/ { in_settings = 1; next }
+    /^\[/ { in_settings = 0 }
+    !in_settings || index($0, "=") == 0 { next }
+    {
+      separator = index($0, "=")
+      key = substr($0, 1, separator - 1)
+      value = substr($0, separator + 1)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      if (key == wanted) { print value; exit }
+    }
+  ' "$waypaper_config"
+}
+
+require_command awk
+require_command realpath
+require_command waypaper
+[[ -r $waypaper_config ]] || fail 78 "Waypaper config is not readable: $waypaper_config"
+[[ $(ini_value backend) == "mpvpaper" ]] || fail 78 "Waypaper backend must be mpvpaper"
+
+background="$(realpath -e -- "$current_background")" || \
+  fail 78 "current Omarchy theme background is unavailable"
+case "${background,,}" in
+  *.jpg | *.jpeg | *.png | *.gif | *.bmp | *.webp | *.avif) ;;
+  *) fail 78 "current Omarchy theme background is not a supported image: $background" ;;
+esac
+case "$background" in
+  *$'\n'* | *$'\r'* | *$'\t'* | *\'* | *\"*)
+    fail 78 "theme background path contains unsupported quotes or control characters"
+    ;;
+esac
+
+monitor="$(ini_value monitors)"
+monitor="${monitor:-All}"
+[[ $monitor =~ ^[A-Za-z0-9_.-]+$ ]] || fail 78 "unsupported monitor name: $monitor"
+
+if [[ ${1:-} == "--check" ]]; then
+  printf 'background=%s\nmonitor=%s\n' "$background" "$monitor"
+  exit 0
+fi
+
+# Persist the new theme's default image in Waypaper and update the existing
+# mpvpaper socket. If supervision was stopped, start it again with that image.
+waypaper --backend mpvpaper --monitor "$monitor" --wallpaper "$background" \
+  --no-post-command >/dev/null
+if command -v omarchy-shell >/dev/null 2>&1; then
+  omarchy-shell -q waypaper-video-background start >/dev/null 2>&1 || true
+fi

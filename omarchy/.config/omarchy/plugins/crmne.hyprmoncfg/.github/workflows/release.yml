@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to publish a release for
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: node --test tests/model.test.js
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          version="$(node -p 'require("./manifest.json").version')"
+          title="$(node -p 'require("./manifest.json").name') $version"
+
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG does not match manifest.json version $version"
+            exit 1
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::Release $TAG already exists, leaving it untouched"
+            exit 0
+          fi
+
+          previous="$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)"
+          range="$TAG"
+          if [ -n "$previous" ]; then
+            range="$previous..$TAG"
+          fi
+
+          {
+            git log --no-merges --reverse --format='- %s' "$range" \
+              | grep -v '^- Release [0-9]' || true
+            if [ -n "$previous" ]; then
+              printf '\n**Full changelog**: %s/compare/%s...%s\n' \
+                "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "$previous" "$TAG"
+            fi
+          } > notes.md
+
+          gh release create "$TAG" --title "$title" --notes-file notes.md

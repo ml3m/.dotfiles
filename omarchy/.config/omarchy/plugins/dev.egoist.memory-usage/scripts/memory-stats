@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+set -u
+export LC_ALL=C
+
+page_size=$(getconf PAGESIZE 2>/dev/null || printf '4096')
+[[ $page_size =~ ^[0-9]+$ ]] || page_size=4096
+sampled_ms=$(date +%s%3N)
+
+awk -v page_size="$page_size" -v sampled_ms="$sampled_ms" '
+  FILENAME == "/proc/meminfo" {
+    value = $2 * 1024
+    if ($1 == "MemTotal:") total = value
+    else if ($1 == "MemFree:") free = value
+    else if ($1 == "MemAvailable:") available = value
+    else if ($1 == "Cached:") cached = value
+    else if ($1 == "SReclaimable:") reclaimable = value
+    else if ($1 == "Shmem:") shared = value
+    else if ($1 == "AnonPages:") anonymous = value
+    else if ($1 == "SwapTotal:") swap_total = value
+    else if ($1 == "SwapFree:") swap_free = value
+    next
+  }
+
+  FILENAME == "/proc/pressure/memory" && $1 == "some" {
+    for (field = 2; field <= NF; field++) {
+      if ($field ~ /^avg10=/) {
+        split($field, pair, "=")
+        pressure = pair[2] + 0
+      }
+    }
+    next
+  }
+
+  FILENAME == "/proc/vmstat" {
+    if ($1 == "pswpin") swap_in = $2
+    else if ($1 == "pswpout") swap_out = $2
+  }
+
+  END {
+    if (total <= 0) exit 1
+    if (available < 0) available = 0
+    if (available > total) available = total
+
+    used = total - available
+    app = anonymous + shared
+    cache = cached + reclaimable - shared
+    if (cache < 0) cache = 0
+    kernel = total - free - app - cache
+    if (kernel < 0) {
+      cache += kernel
+      kernel = 0
+      if (cache < 0) cache = 0
+    }
+
+    swap_used = swap_total - swap_free
+    if (swap_used < 0) swap_used = 0
+    if (pressure < 0) pressure = 0
+    if (pressure > 100) pressure = 100
+
+    printf "{"
+    printf "\"sampledMs\":%.0f,", sampled_ms
+    printf "\"pageSize\":%.0f,", page_size
+    printf "\"totalBytes\":%.0f,", total
+    printf "\"usedBytes\":%.0f,", used
+    printf "\"availableBytes\":%.0f,", available
+    printf "\"appBytes\":%.0f,", app
+    printf "\"kernelBytes\":%.0f,", kernel
+    printf "\"cacheBytes\":%.0f,", cache
+    printf "\"freeBytes\":%.0f,", free
+    printf "\"swapTotalBytes\":%.0f,", swap_total
+    printf "\"swapUsedBytes\":%.0f,", swap_used
+    printf "\"swapInPages\":%.0f,", swap_in
+    printf "\"swapOutPages\":%.0f,", swap_out
+    printf "\"pressurePercent\":%.2f", pressure
+    printf "}\n"
+  }
+' /proc/meminfo /proc/pressure/memory /proc/vmstat
