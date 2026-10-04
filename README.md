@@ -12,7 +12,7 @@ Before installing, ensure you have the following installed:
 
 1. **Clone the repository:**
    ```bash
-   git clone <your-repo-url> ~/.dotfiles
+   git clone git@github.com:ml3m/.dotfiles.git ~/.dotfiles
    ```
 
 2. **Navigate to the directory:**
