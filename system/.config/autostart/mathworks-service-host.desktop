@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=Mathworks Service Host
+Exec=/home/ml3m/.MathWorks/ServiceHost/-mw_shared_installs/v2026.11.0.3/bin/glnxa64/MathWorksServiceHost service --realm-id companion@prod@production
+Terminal=false
