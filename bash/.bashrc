@@ -42,3 +42,5 @@ eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 export TMPDIR="$HOME/.tmp"
 export PIP_NO_CACHE_DIR=1
 export HSA_OVERRIDE_GFX_VERSION=10.3.0
+
+export PATH="$HOME/.local/bin:$PATH"
