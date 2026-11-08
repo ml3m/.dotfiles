@@ -13,8 +13,17 @@ Item {
   property int lastExitCode: 0
   property string lastLog: ""
 
-  readonly property string pluginDir: manifest && manifest.__sourceDir
-    ? String(manifest.__sourceDir) : ""
+  readonly property string home: Quickshell.env("HOME") || ""
+  readonly property string resolvedDir: {
+    var url = Qt.resolvedUrl(".").toString()
+    if (url.indexOf("file://") === 0) {
+      return url.substring(7).replace(/\/$/, "")
+    }
+    return ""
+  }
+  readonly property string pluginDir: (manifest && manifest.__sourceDir)
+    ? String(manifest.__sourceDir)
+    : (resolvedDir || (home ? home + "/.config/omarchy/plugins/io.github.gavidetdoliath.waypaper-video-background" : ""))
 
   function ensureStarted() {
     if (stopping || !desiredRunning || !pluginDir || wallpaperProcess.running) return

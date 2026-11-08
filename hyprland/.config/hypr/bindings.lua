@@ -42,3 +42,9 @@ o.bind(
 
 -- Toggle Autoclicker
 -- o.bind("SUPER + SHIFT + J", "Toggle Autoclicker", "/home/ml3m/autoclick.sh")
+
+hl.bind("CTRL + SHIFT + P", hl.dsp.global("com.t3tools.T3Code:capture-window"))
+
+-- Mute focused window
+hl.unbind("SUPER + SHIFT + M")
+o.bind("SUPER + SHIFT + M", "Mute focused window", "omarchy-audio-window-mute")

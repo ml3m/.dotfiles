@@ -22,6 +22,7 @@ hl.monitor({
 	mode = "3440x1440@100.00",
 	position = "2560x0",
 	scale = omarchy_monitor_scale,
+	vrr = 1,
 })
 
 -- Fallback for any other plugged-in monitors

@@ -1,31 +1,12 @@
 {
   "bar": {
-    "centerAnchor": "omarchy.clock",
     "layout": {
       "center": [
-        {
-          "id": "omarchy.indicators"
-        },
         {
           "format": "dddd HH:mm",
           "formatAlt": "d MMMM 'W'ww yyyy",
           "id": "omarchy.clock",
           "verticalFormat": "HH\n—\nmm"
-        },
-        {
-          "id": "omarchy.keyboard-layout"
-        },
-        {
-          "id": "omarchy.weather"
-        },
-        {
-          "id": "dev.egoist.memory-usage"
-        },
-        {
-          "id": "omarchy.system-update"
-        },
-        {
-          "id": "quickshell.spotify"
         }
       ],
       "left": [
@@ -38,10 +19,13 @@
       ],
       "right": [
         {
-          "id": "omarchy.agents"
+          "id": "omarchy.tray"
         },
         {
-          "id": "omarchy.tray"
+          "id": "omarchy.keyboard-layout"
+        },
+        {
+          "id": "omarchy.agents"
         },
         {
           "id": "ayumad.g14-controls"
@@ -64,10 +48,72 @@
         {
           "id": "omarchy.power"
         }
-      ]
+      ],
+      "centerBegin": [
+        {
+          "id": "omarchy.indicators"
+        }
+      ],
+      "centerEnd": [
+        {
+          "id": "omarchy.elsewhen",
+          "cities": [
+            {
+              "name": "Venlo",
+              "zone": "Europe/Amsterdam",
+              "lat": 51.37,
+              "lon": 6.16806,
+              "region": "Limburg, NL"
+            },
+            {
+              "name": "Dubai",
+              "zone": "Asia/Dubai"
+            },
+            {
+              "name": "Tokyo",
+              "zone": "Asia/Tokyo"
+            },
+            {
+              "name": "Los Angeles",
+              "zone": "America/Los_Angeles"
+            },
+            {
+              "name": "New York",
+              "zone": "America/New_York"
+            },
+            {
+              "name": "Austin",
+              "zone": "America/Chicago",
+              "lat": 30.26715,
+              "lon": -97.74306,
+              "region": "Texas, US"
+            }
+          ],
+          "here": {
+            "name": "Venlo",
+            "zone": "Europe/Amsterdam",
+            "lat": 51.37,
+            "lon": 6.16806,
+            "region": "Limburg, NL"
+          }
+        },
+        {
+          "id": "omarchy.weather"
+        },
+        {
+          "id": "dev.egoist.memory-usage"
+        },
+        {
+          "id": "omarchy.system-update"
+        },
+        {
+          "id": "quickshell.spotify"
+        }
+      ],
+      "tray": []
     },
     "position": "top",
-    "transparent": false
+    "transparent": true
   },
   "idle": {
     "lock": 300,
@@ -87,8 +133,7 @@
   ],
   "version": 1,
   "disabledPlugins": [
-    "omarchy.lock",
-    "omarchy.background"
+    "omarchy.lock"
   ],
   "cloneSourceRestores": [
     "io.github.sirjul1337.lock-explorer"

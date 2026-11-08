@@ -7,6 +7,7 @@ return {
       "c",
       "rust",
       "org",
+      "latex",
     })
   end,
 }
