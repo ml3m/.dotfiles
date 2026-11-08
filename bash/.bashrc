@@ -39,7 +39,7 @@ export PATH="$HOME/.bin:$PATH"
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 
 # don't hit quota due to pip
-export TMPDIR="$HOME/.tmp"
+export PIP_CACHE_DIR="$HOME/.tmp/pip-cache"
 export PIP_NO_CACHE_DIR=1
 export HSA_OVERRIDE_GFX_VERSION=10.3.0
 
