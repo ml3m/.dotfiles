@@ -1,0 +1,104 @@
+#!/bin/bash
+
+# omarchy:summary=Toggle mute for the audio stream(s) of the focused window
+
+set -euo pipefail
+
+win_json=$(hyprctl activewindow -j 2>/dev/null || echo "{}")
+win_pid=$(echo "$win_json" | jq -r '.pid // empty' 2>/dev/null || true)
+win_class=$(echo "$win_json" | jq -r '.class // empty' 2>/dev/null || true)
+
+if [[ -z "$win_pid" || "$win_pid" -le 0 ]]; then
+  if command -v omarchy-osd >/dev/null 2>&1; then
+    omarchy-osd -i volume-muted -m "No focused window"
+  fi
+  exit 0
+fi
+
+declare -A pids
+pids["$win_pid"]=1
+
+# Collect all descendant PIDs
+while read -r p; do
+  [[ -n "$p" ]] && pids["$p"]=1
+done < <(pstree -p -l "$win_pid" 2>/dev/null | grep -o '([0-9]\+)' | tr -d '()' || true)
+
+# Collect ancestor PIDs (stop before system init/manager/compositor/shell)
+curr=$win_pid
+while true; do
+  ppid=$(ps -o ppid= -p "$curr" 2>/dev/null | tr -d ' ' || echo 1)
+  [[ -z "$ppid" || "$ppid" -le 1 ]] && break
+  pcomm=$(ps -o comm= -p "$ppid" 2>/dev/null | tr -d ' ' || echo "")
+  [[ "$pcomm" =~ ^(systemd|init|uwsm|Hyprland|sddm|bash|zsh|fish)$ ]] && break
+  pids["$ppid"]=1
+  curr=$ppid
+done
+
+inputs_json=$(pactl --format=json list sink-inputs 2>/dev/null || echo "[]")
+
+matching_indices=()
+any_unmuted=0
+
+# First pass: match by PID
+while read -r item; do
+  [[ -z "$item" ]] && continue
+  idx=$(echo "$item" | jq -r '.index')
+  mute=$(echo "$item" | jq -r '.mute')
+  spid=$(echo "$item" | jq -r '.properties["application.process.id"] // empty')
+  if [[ -n "$spid" && -n "${pids[$spid]:-}" ]]; then
+    matching_indices+=("$idx")
+    [[ "$mute" == "false" ]] && any_unmuted=1
+  fi
+done < <(echo "$inputs_json" | jq -c '.[]' 2>/dev/null || true)
+
+# Second pass: fallback to window class name if no PID matched (e.g. flatpak/sandbox)
+if [[ ${#matching_indices[@]} -eq 0 && -n "$win_class" ]]; then
+  win_class_lower=$(tr '[:upper:]' '[:lower:]' <<< "$win_class")
+  while read -r item; do
+    [[ -z "$item" ]] && continue
+    idx=$(echo "$item" | jq -r '.index')
+    mute=$(echo "$item" | jq -r '.mute')
+    sbinary=$(echo "$item" | jq -r '.properties["application.process.binary"] // empty' | tr '[:upper:]' '[:lower:]')
+    sname=$(echo "$item" | jq -r '.properties["application.name"] // empty' | tr '[:upper:]' '[:lower:]')
+    is_match=0
+    if [[ -n "$sbinary" && ( "$sbinary" == *"$win_class_lower"* || "$win_class_lower" == *"$sbinary"* ) ]]; then
+      is_match=1
+    elif [[ -n "$sname" && ( "$sname" == *"$win_class_lower"* || "$win_class_lower" == *"$sname"* ) ]]; then
+      is_match=1
+    fi
+    if [[ $is_match -eq 1 ]]; then
+      matching_indices+=("$idx")
+      [[ "$mute" == "false" ]] && any_unmuted=1
+    fi
+  done < <(echo "$inputs_json" | jq -c '.[]' 2>/dev/null || true)
+fi
+
+app_name="${win_class:-Window}"
+app_name="$(tr '[:lower:]' '[:upper:]' <<< "${app_name:0:1}")${app_name:1}"
+
+if [[ ${#matching_indices[@]} -eq 0 ]]; then
+  echo "No audio streams found for $app_name"
+  if command -v omarchy-osd >/dev/null 2>&1; then
+    omarchy-osd -i volume-muted -m "No audio in $app_name"
+  fi
+  exit 0
+fi
+
+if [[ $any_unmuted -eq 1 ]]; then
+  target_mute=1
+  status_text="Muted"
+  icon="volume-muted"
+else
+  target_mute=0
+  status_text="Unmuted"
+  icon="volume-high"
+fi
+
+for idx in "${matching_indices[@]}"; do
+  pactl set-sink-input-mute "$idx" "$target_mute"
+done
+
+echo "$status_text $app_name"
+if command -v omarchy-osd >/dev/null 2>&1; then
+  omarchy-osd -i "$icon" -m "$status_text $app_name"
+fi
