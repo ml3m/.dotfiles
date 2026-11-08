@@ -1,6 +1,4 @@
 [tools]
-codex = "latest"
-node = "25.7.0"
+java = "temurin-17.0.21+9"
 
 [settings.upgrade]
-auto_prune = false
