@@ -48,3 +48,6 @@ hl.bind("CTRL + SHIFT + P", hl.dsp.global("com.t3tools.T3Code:capture-window"))
 -- Mute focused window
 hl.unbind("SUPER + SHIFT + M")
 o.bind("SUPER + SHIFT + M", "Mute focused window", "omarchy-audio-window-mute")
+
+-- Spotify: Add playing track to playlist
+o.bind("SUPER + ALT + P", "Spotify: Add to Playlist", "spotify-quick-add")

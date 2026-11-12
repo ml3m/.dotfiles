@@ -1,0 +1,469 @@
+#!/usr/bin/env python3
+import sys
+import os
+import json
+import time
+import base64
+import urllib.request
+import urllib.parse
+import urllib.error
+import subprocess
+import webbrowser
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+CONFIG_DIR = os.path.expanduser("~/.config/spotify-quick-add")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+LAST_ADDED_FILE = os.path.join(CONFIG_DIR, "last_added.json")
+
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        return {}
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading config: {e}", file=sys.stderr)
+        return {}
+
+def save_config(cfg):
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(cfg, f, indent=2)
+    os.chmod(CONFIG_FILE, 0o600)
+
+def notify(summary, body, urgency="normal", timeout=3500):
+    cmd = [
+        "notify-send",
+        "-a", "Spotify",
+        "-i", "spotify",
+        "-u", urgency,
+        "-t", str(timeout),
+        summary,
+        body
+    ]
+    try:
+        env = os.environ.copy()
+        env.pop("LD_LIBRARY_PATH", None)
+        subprocess.run(cmd, env=env, check=False)
+    except Exception:
+        pass
+
+def get_current_spotify_track():
+    """Queries MPRIS via busctl to get currently playing Spotify track."""
+    try:
+        cmd = [
+            "busctl", "--user", "--json=pretty",
+            "get-property", "org.mpris.MediaPlayer2.spotify",
+            "/org/mpris/MediaPlayer2",
+            "org.mpris.MediaPlayer2.Player", "Metadata"
+        ]
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        meta = json.loads(res.stdout)
+        data = meta.get("data", {})
+        
+        track_id = ""
+        raw_id = data.get("mpris:trackid", {}).get("data", "")
+        if "/track/" in raw_id:
+            track_id = raw_id.split("/track/")[-1]
+            
+        if not track_id:
+            url = data.get("xesam:url", {}).get("data", "")
+            if "/track/" in url:
+                track_id = url.split("/track/")[-1].split("?")[0]
+                
+        title = data.get("xesam:title", {}).get("data", "Unknown Title")
+        
+        artists = data.get("xesam:artist", {}).get("data", [])
+        if isinstance(artists, list):
+            artist = ", ".join(artists) if artists else "Unknown Artist"
+        else:
+            artist = str(artists)
+            
+        album = data.get("xesam:album", {}).get("data", "")
+        
+        return {
+            "track_id": track_id,
+            "title": title,
+            "artist": artist,
+            "album": album,
+            "raw_id": raw_id
+        }
+    except subprocess.CalledProcessError:
+        return None
+    except Exception as e:
+        print(f"Error reading Spotify metadata: {e}", file=sys.stderr)
+        return None
+
+def refresh_access_token(cfg):
+    client_id = cfg.get("client_id")
+    client_secret = cfg.get("client_secret")
+    refresh_token = cfg.get("refresh_token")
+    
+    if not (client_id and client_secret and refresh_token):
+        return None
+        
+    auth_header = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+    url = "https://accounts.spotify.com/api/token"
+    payload = urllib.parse.urlencode({
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token
+    }).encode("utf-8")
+    
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Authorization": f"Basic {auth_header}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+    )
+    
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode())
+            cfg["access_token"] = data["access_token"]
+            cfg["expires_at"] = time.time() + data.get("expires_in", 3600) - 60
+            if "refresh_token" in data:
+                cfg["refresh_token"] = data["refresh_token"]
+            save_config(cfg)
+            return cfg["access_token"]
+    except Exception as e:
+        print(f"Failed to refresh token: {e}", file=sys.stderr)
+        return None
+
+def get_valid_access_token(cfg):
+    token = cfg.get("access_token")
+    expires_at = cfg.get("expires_at", 0)
+    if token and time.time() < expires_at:
+        return token
+    return refresh_access_token(cfg)
+
+def fetch_user_playlists(token):
+    url = "https://api.spotify.com/v1/me/playlists?limit=50"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("items", [])
+    except Exception as e:
+        print(f"Error fetching playlists: {e}", file=sys.stderr)
+        return []
+
+def is_track_in_playlist(token, playlist_id, track_id):
+    """Checks whether the track ID is already present in the target playlist."""
+    url = f"https://api.spotify.com/v1/playlists/{playlist_id}/items?fields=next,items(item(id))&limit=100"
+    while url:
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        try:
+            with urllib.request.urlopen(req) as resp:
+                data = json.loads(resp.read().decode())
+                for entry in data.get("items", []):
+                    item = entry.get("item") or entry.get("track") or {}
+                    if item.get("id") == track_id:
+                        return True
+                url = data.get("next")
+        except Exception as e:
+            print(f"Error checking playlist tracks: {e}", file=sys.stderr)
+            break
+    return False
+
+def add_track_to_playlist(token, playlist_id, track_id):
+    url = f"https://api.spotify.com/v1/playlists/{playlist_id}/items"
+    payload = json.dumps({"uris": [f"spotify:track:{track_id}"]}).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return resp.status in (200, 201), ""
+    except urllib.error.HTTPError as e:
+        err_msg = e.read().decode()
+        return False, f"HTTP {e.code}: {err_msg}"
+    except Exception as e:
+        return False, str(e)
+
+def parse_playlist_input(user_input):
+    val = user_input.strip()
+    if "/playlist/" in val:
+        val = val.split("/playlist/")[1].split("?")[0]
+    elif val.startswith("spotify:playlist:"):
+        val = val.split("spotify:playlist:")[1]
+    return val
+
+def run_auth_server(cfg):
+    client_id = cfg.get("client_id")
+    client_secret = cfg.get("client_secret")
+    redirect_uri = cfg.get("redirect_uri", "http://127.0.0.1:8888/callback")
+    
+    if not client_id or not client_secret:
+        print("Error: client_id and client_secret must be set in config.json", file=sys.stderr)
+        sys.exit(1)
+        
+    scopes = [
+        "playlist-modify-public",
+        "playlist-modify-private",
+        "playlist-read-private",
+        "playlist-read-collaborative"
+    ]
+    
+    auth_code_holder = {}
+    
+    class CallbackHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            parsed_path = urllib.parse.urlparse(self.path)
+            if parsed_path.path == "/callback":
+                params = urllib.parse.parse_qs(parsed_path.query)
+                code = params.get("code", [None])[0]
+                error = params.get("error", [None])[0]
+                if code:
+                    auth_code_holder["code"] = code
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    html = """
+                    <html>
+                    <body style="font-family:sans-serif; text-align:center; padding-top:60px; background:#121212; color:#fff;">
+                      <h1 style="color:#1DB954; font-size: 32px;">Authorization Successful!</h1>
+                      <p style="font-size: 18px; color: #b3b3b3;">Spotify Quick Add is now connected. You can close this tab.</p>
+                    </body>
+                    </html>
+                    """
+                    self.wfile.write(html.encode("utf-8"))
+                else:
+                    self.send_response(400)
+                    self.end_headers()
+                    self.wfile.write(f"Authorization error: {error}".encode("utf-8"))
+            else:
+                self.send_response(404)
+                self.end_headers()
+        def log_message(self, format, *args):
+            return
+
+    server_address = ("127.0.0.1", 8888)
+    httpd = HTTPServer(server_address, CallbackHandler)
+    
+    auth_params = {
+        "client_id": client_id,
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+        "scope": " ".join(scopes),
+        "show_dialog": "true"
+    }
+    auth_url = f"https://accounts.spotify.com/authorize?{urllib.parse.urlencode(auth_params)}"
+    
+    print("\n" + "="*60)
+    print("SPOTIFY AUTHENTICATION SETUP")
+    print("="*60)
+    print("Opening browser for authorization...")
+    print(f"\nIf browser does not open automatically, visit this URL:\n\n{auth_url}\n")
+    try:
+        webbrowser.open(auth_url)
+    except Exception:
+        pass
+        
+    print("Waiting for callback on http://127.0.0.1:8888/callback ...")
+    while "code" not in auth_code_holder:
+        httpd.handle_request()
+        
+    code = auth_code_holder["code"]
+    print("Authorization code received! Exchanging for tokens...")
+    
+    auth_header = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+    token_url = "https://accounts.spotify.com/api/token"
+    payload = urllib.parse.urlencode({
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri
+    }).encode("utf-8")
+    
+    req = urllib.request.Request(
+        token_url,
+        data=payload,
+        headers={
+            "Authorization": f"Basic {auth_header}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+    )
+    
+    with urllib.request.urlopen(req) as resp:
+        tokens = json.loads(resp.read().decode())
+        
+    cfg["access_token"] = tokens["access_token"]
+    cfg["refresh_token"] = tokens["refresh_token"]
+    cfg["expires_at"] = time.time() + tokens.get("expires_in", 3600) - 60
+    save_config(cfg)
+    print("Tokens saved successfully!")
+    notify("Spotify Quick Add", "Authorization successful!")
+    
+    if sys.stdin.isatty():
+        select_playlist_flow(cfg)
+    else:
+        print("Run 'spotify-quick-add --select-playlist' to pick your playlist interactively, or 'spotify-quick-add --playlist <URL/ID>'.")
+
+def select_playlist_flow(cfg):
+    token = get_valid_access_token(cfg)
+    if not token:
+        print("Failed to get valid token. Please re-run --auth", file=sys.stderr)
+        return
+        
+    print("\nFetching your playlists...")
+    playlists = fetch_user_playlists(token)
+    if not playlists:
+        print("No playlists found or could not fetch playlists.")
+        try:
+            p_id = input("Enter your target playlist URL or ID: ").strip()
+            set_playlist_by_id(cfg, token, p_id)
+        except (EOFError, KeyboardInterrupt):
+            pass
+        return
+
+    print("\nAvailable Playlists:")
+    for idx, p in enumerate(playlists, start=1):
+        name = p.get("name", "Untitled")
+        pid = p.get("id")
+        tracks_total = p.get("tracks", {}).get("total", 0)
+        print(f"  [{idx:2d}] {name} ({tracks_total} tracks) [ID: {pid}]")
+        
+    print("\nChoose target playlist:")
+    try:
+        choice = input(f"Enter number (1-{len(playlists)}) or paste playlist URL/ID: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return
+
+    if choice.isdigit() and 1 <= int(choice) <= len(playlists):
+        selected = playlists[int(choice) - 1]
+        cfg["playlist_id"] = selected["id"]
+        cfg["playlist_name"] = selected.get("name", "Playlist")
+        save_config(cfg)
+    else:
+        set_playlist_by_id(cfg, token, choice)
+
+    print(f"\nTarget playlist configured: '{cfg['playlist_name']}' ({cfg['playlist_id']})")
+    notify("Spotify Quick Add Configured", f"Target playlist: {cfg['playlist_name']}")
+
+def set_playlist_by_id(cfg, token, pid_or_url):
+    pid = parse_playlist_input(pid_or_url)
+    cfg["playlist_id"] = pid
+    try:
+        req = urllib.request.Request(
+            f"https://api.spotify.com/v1/playlists/{pid}",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        with urllib.request.urlopen(req) as resp:
+            pdata = json.loads(resp.read().decode())
+            cfg["playlist_name"] = pdata.get("name", "Playlist")
+    except Exception:
+        cfg["playlist_name"] = "Playlist"
+    save_config(cfg)
+
+def do_add_action():
+    cfg = load_config()
+    playlist_id = cfg.get("playlist_id")
+    playlist_name = cfg.get("playlist_name", "Playlist")
+    
+    if not playlist_id:
+        notify("Spotify Quick Add", "No target playlist configured. Run: spotify-quick-add --select-playlist", urgency="critical")
+        return 1
+        
+    track = get_current_spotify_track()
+    if not track or not track.get("track_id"):
+        notify("Spotify Quick Add", "No track currently playing", urgency="low")
+        return 0
+        
+    track_id = track["track_id"]
+    title = track["title"]
+    artist = track["artist"]
+    
+    # 1. Anti-spam check (pressed multiple times in rapid succession)
+    try:
+        if os.path.exists(LAST_ADDED_FILE):
+            with open(LAST_ADDED_FILE, "r") as f:
+                last_data = json.load(f)
+                if last_data.get("track_id") == track_id and (time.time() - last_data.get("time", 0)) < 15:
+                    notify("Already in Playlist", f"<b>{title}</b>\n{artist} was just added to <i>{playlist_name}</i>", urgency="low")
+                    return 0
+    except Exception:
+        pass
+
+    token = get_valid_access_token(cfg)
+    if not token:
+        notify("Spotify Quick Add", "Authentication expired. Run: spotify-quick-add --auth", urgency="critical")
+        return 1
+
+    # 2. Duplicate check against the target playlist
+    if is_track_in_playlist(token, playlist_id, track_id):
+        notify("Already in Playlist", f"<b>{title}</b>\n{artist} is already in <i>{playlist_name}</i>", urgency="normal")
+        return 0
+
+    # 3. Add to playlist
+    success, err = add_track_to_playlist(token, playlist_id, track_id)
+    if success:
+        try:
+            with open(LAST_ADDED_FILE, "w") as f:
+                json.dump({"track_id": track_id, "time": time.time(), "title": title}, f)
+        except Exception:
+            pass
+        notify("Added to Playlist", f"<b>{title}</b>\n{artist} → <i>{playlist_name}</i>")
+        return 0
+    else:
+        notify("Failed to Add Track", f"{err}", urgency="critical")
+        return 1
+
+def main():
+    if len(sys.argv) > 1:
+        arg = sys.argv[1]
+        cfg = load_config()
+        if arg in ("--auth", "--setup"):
+            run_auth_server(cfg)
+            sys.exit(0)
+        elif arg in ("--select-playlist", "--playlist", "-p"):
+            if len(sys.argv) > 2:
+                pid = sys.argv[2]
+                token = get_valid_access_token(cfg)
+                set_playlist_by_id(cfg, token, pid)
+                print(f"Playlist set to: {cfg.get('playlist_name')} ({cfg.get('playlist_id')})")
+                notify("Spotify Quick Add Configured", f"Target playlist: {cfg.get('playlist_name')}")
+            else:
+                select_playlist_flow(cfg)
+            sys.exit(0)
+        elif arg == "--list-playlists":
+            token = get_valid_access_token(cfg)
+            if not token:
+                print("Not authenticated. Run spotify-quick-add --auth first.")
+                sys.exit(1)
+            playlists = fetch_user_playlists(token)
+            for idx, p in enumerate(playlists, start=1):
+                print(f"[{idx:2d}] {p.get('name')} (ID: {p.get('id')})")
+            sys.exit(0)
+        elif arg == "--test":
+            print("Config:", json.dumps({k: ("***" if "secret" in k or "token" in k else v) for k, v in cfg.items()}, indent=2))
+            track = get_current_spotify_track()
+            print("Current Track:", json.dumps(track, indent=2))
+            if track and track.get("track_id"):
+                token = get_valid_access_token(cfg)
+                pid = cfg.get("playlist_id")
+                if token and pid:
+                    in_pl = is_track_in_playlist(token, pid, track["track_id"])
+                    print(f"Is track in playlist '{cfg.get('playlist_name')}': {in_pl}")
+            sys.exit(0)
+        elif arg in ("-h", "--help"):
+            print("Usage: spotify-quick-add [OPTIONS]")
+            print("  (no args)               Add currently playing track to target playlist")
+            print("  --auth / --setup        One-time OAuth authorization & playlist setup")
+            print("  --select-playlist       Choose a different target playlist interactively")
+            print("  --playlist <URL/ID>     Set target playlist directly by ID or URL")
+            print("  --list-playlists        List all your Spotify playlists")
+            print("  --test                  Test MPRIS detection and config")
+            sys.exit(0)
+
+    # Default action
+    sys.exit(do_add_action())
+
+if __name__ == "__main__":
+    main()
