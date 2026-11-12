@@ -31,10 +31,10 @@ def save_config(cfg):
         json.dump(cfg, f, indent=2)
     os.chmod(CONFIG_FILE, 0o600)
 
-def notify(summary, body, urgency="normal", timeout=1800):
+def notify(summary, body, urgency="normal", timeout=1000):
     """
     Sends desktop notification and automatically closes it after timeout (ms),
-    bypassing desktop shells that enforce high minimum durations.
+    using Omarchy's native shell dismiss IPC as well as freedesktop CloseNotification.
     """
     cmd = [
         "notify-send",
@@ -51,12 +51,20 @@ def notify(summary, body, urgency="normal", timeout=1800):
         env.pop("LD_LIBRARY_PATH", None)
         res = subprocess.run(cmd, env=env, stdout=subprocess.PIPE, text=True, check=False)
         notif_id = res.stdout.strip()
-        if notif_id and notif_id.isdigit() and timeout > 0:
-            delay = max(0.5, timeout / 1000.0)
-            subprocess.Popen([
-                "bash", "-c",
-                f"sleep {delay} && busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications org.freedesktop.Notifications CloseNotification u {notif_id}"
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if timeout > 0:
+            delay = max(0.3, timeout / 1000.0)
+            # Dismiss via Omarchy shell IPC (which instantly drops the on-screen card)
+            # and via freedesktop CloseNotification.
+            escaped_summary = summary.replace('"', '\\"')
+            dismiss_cmd = (
+                f"sleep {delay} && "
+                f"omarchy-shell notifications dismiss \"{escaped_summary}\" >/dev/null 2>&1 || "
+                f"omarchy-shell notifications dismissOne >/dev/null 2>&1"
+            )
+            if notif_id and notif_id.isdigit():
+                dismiss_cmd += f" ; busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications org.freedesktop.Notifications CloseNotification u {notif_id} >/dev/null 2>&1"
+
+            subprocess.Popen(["bash", "-c", dismiss_cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
 
@@ -378,7 +386,7 @@ def do_add_action():
     cfg = load_config()
     playlist_id = cfg.get("playlist_id")
     playlist_name = cfg.get("playlist_name", "Playlist")
-    timeout_ms = int(cfg.get("notification_timeout_ms", 1800))
+    timeout_ms = int(cfg.get("notification_timeout_ms", 1000))
     
     if not playlist_id:
         notify("Spotify Quick Add", "No target playlist configured. Run: spotify-quick-add --select-playlist", urgency="critical", timeout=4000)
@@ -452,7 +460,7 @@ def main():
                 save_config(cfg)
                 print(f"Notification duration set to {t}ms ({t/1000:.1f}s)")
             else:
-                print(f"Current notification duration: {cfg.get('notification_timeout_ms', 1800)}ms")
+                print(f"Current notification duration: {cfg.get('notification_timeout_ms', 1000)}ms")
             sys.exit(0)
         elif arg == "--list-playlists":
             token = get_valid_access_token(cfg)
@@ -480,7 +488,7 @@ def main():
             print("  --auth / --setup          One-time OAuth authorization & playlist setup")
             print("  --select-playlist         Choose a different target playlist interactively")
             print("  --playlist <URL/ID>       Set target playlist directly by ID or URL")
-            print("  --timeout <ms>            Set notification screen duration in milliseconds (default: 1800)")
+            print("  --timeout <ms>            Set notification screen duration in milliseconds (default: 1000)")
             print("  --list-playlists          List all your Spotify playlists")
             print("  --test                    Test MPRIS detection and config")
             sys.exit(0)
