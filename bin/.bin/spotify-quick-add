@@ -31,9 +31,14 @@ def save_config(cfg):
         json.dump(cfg, f, indent=2)
     os.chmod(CONFIG_FILE, 0o600)
 
-def notify(summary, body, urgency="normal", timeout=3500):
+def notify(summary, body, urgency="normal", timeout=1800):
+    """
+    Sends desktop notification and automatically closes it after timeout (ms),
+    bypassing desktop shells that enforce high minimum durations.
+    """
     cmd = [
         "notify-send",
+        "-p",
         "-a", "Spotify",
         "-i", "spotify",
         "-u", urgency,
@@ -44,7 +49,14 @@ def notify(summary, body, urgency="normal", timeout=3500):
     try:
         env = os.environ.copy()
         env.pop("LD_LIBRARY_PATH", None)
-        subprocess.run(cmd, env=env, check=False)
+        res = subprocess.run(cmd, env=env, stdout=subprocess.PIPE, text=True, check=False)
+        notif_id = res.stdout.strip()
+        if notif_id and notif_id.isdigit() and timeout > 0:
+            delay = max(0.5, timeout / 1000.0)
+            subprocess.Popen([
+                "bash", "-c",
+                f"sleep {delay} && busctl --user call org.freedesktop.Notifications /org/freedesktop/Notifications org.freedesktop.Notifications CloseNotification u {notif_id}"
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
 
@@ -366,14 +378,15 @@ def do_add_action():
     cfg = load_config()
     playlist_id = cfg.get("playlist_id")
     playlist_name = cfg.get("playlist_name", "Playlist")
+    timeout_ms = int(cfg.get("notification_timeout_ms", 1800))
     
     if not playlist_id:
-        notify("Spotify Quick Add", "No target playlist configured. Run: spotify-quick-add --select-playlist", urgency="critical")
+        notify("Spotify Quick Add", "No target playlist configured. Run: spotify-quick-add --select-playlist", urgency="critical", timeout=4000)
         return 1
         
     track = get_current_spotify_track()
     if not track or not track.get("track_id"):
-        notify("Spotify Quick Add", "No track currently playing", urgency="low")
+        notify("Spotify Quick Add", "No track currently playing", urgency="low", timeout=timeout_ms)
         return 0
         
     track_id = track["track_id"]
@@ -386,19 +399,19 @@ def do_add_action():
             with open(LAST_ADDED_FILE, "r") as f:
                 last_data = json.load(f)
                 if last_data.get("track_id") == track_id and (time.time() - last_data.get("time", 0)) < 15:
-                    notify("Already in Playlist", f"<b>{title}</b>\n{artist} was just added to <i>{playlist_name}</i>", urgency="low")
+                    notify("Already in Playlist", f"<b>{title}</b>\n{artist} was just added to <i>{playlist_name}</i>", urgency="low", timeout=timeout_ms)
                     return 0
     except Exception:
         pass
 
     token = get_valid_access_token(cfg)
     if not token:
-        notify("Spotify Quick Add", "Authentication expired. Run: spotify-quick-add --auth", urgency="critical")
+        notify("Spotify Quick Add", "Authentication expired. Run: spotify-quick-add --auth", urgency="critical", timeout=4000)
         return 1
 
     # 2. Duplicate check against the target playlist
     if is_track_in_playlist(token, playlist_id, track_id):
-        notify("Already in Playlist", f"<b>{title}</b>\n{artist} is already in <i>{playlist_name}</i>", urgency="normal")
+        notify("Already in Playlist", f"<b>{title}</b>\n{artist} is already in <i>{playlist_name}</i>", urgency="normal", timeout=timeout_ms)
         return 0
 
     # 3. Add to playlist
@@ -409,10 +422,10 @@ def do_add_action():
                 json.dump({"track_id": track_id, "time": time.time(), "title": title}, f)
         except Exception:
             pass
-        notify("Added to Playlist", f"<b>{title}</b>\n{artist} → <i>{playlist_name}</i>")
+        notify("Added to Playlist", f"<b>{title}</b>\n{artist} → <i>{playlist_name}</i>", timeout=timeout_ms)
         return 0
     else:
-        notify("Failed to Add Track", f"{err}", urgency="critical")
+        notify("Failed to Add Track", f"{err}", urgency="critical", timeout=4000)
         return 1
 
 def main():
@@ -431,6 +444,15 @@ def main():
                 notify("Spotify Quick Add Configured", f"Target playlist: {cfg.get('playlist_name')}")
             else:
                 select_playlist_flow(cfg)
+            sys.exit(0)
+        elif arg in ("--timeout", "-t"):
+            if len(sys.argv) > 2:
+                t = int(sys.argv[2])
+                cfg["notification_timeout_ms"] = t
+                save_config(cfg)
+                print(f"Notification duration set to {t}ms ({t/1000:.1f}s)")
+            else:
+                print(f"Current notification duration: {cfg.get('notification_timeout_ms', 1800)}ms")
             sys.exit(0)
         elif arg == "--list-playlists":
             token = get_valid_access_token(cfg)
@@ -454,12 +476,13 @@ def main():
             sys.exit(0)
         elif arg in ("-h", "--help"):
             print("Usage: spotify-quick-add [OPTIONS]")
-            print("  (no args)               Add currently playing track to target playlist")
-            print("  --auth / --setup        One-time OAuth authorization & playlist setup")
-            print("  --select-playlist       Choose a different target playlist interactively")
-            print("  --playlist <URL/ID>     Set target playlist directly by ID or URL")
-            print("  --list-playlists        List all your Spotify playlists")
-            print("  --test                  Test MPRIS detection and config")
+            print("  (no args)                 Add currently playing track to target playlist")
+            print("  --auth / --setup          One-time OAuth authorization & playlist setup")
+            print("  --select-playlist         Choose a different target playlist interactively")
+            print("  --playlist <URL/ID>       Set target playlist directly by ID or URL")
+            print("  --timeout <ms>            Set notification screen duration in milliseconds (default: 1800)")
+            print("  --list-playlists          List all your Spotify playlists")
+            print("  --test                    Test MPRIS detection and config")
             sys.exit(0)
 
     # Default action
